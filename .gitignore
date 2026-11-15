@@ -1,0 +1,17 @@
+# secrets and local state
+.env
+.sync/
+helper/.token
+# backups and leftovers
+_backup-*/
+_gymmane_src/
+*.bak
+*.bak-*
+node_modules/
+*.apk
+*.aab
+*.keystore
+*.jks
+# OS
+Thumbs.db
+.DS_Store
