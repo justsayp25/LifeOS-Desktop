@@ -79,6 +79,7 @@
         if (isTemp(id)) (creating[id] || Promise.resolve(null)).then(go); else go(id);
       });
     });
+    V.reloadTasks = load;
     load(); poller(load, 20000);
   }
 

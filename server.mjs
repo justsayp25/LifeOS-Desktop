@@ -14,7 +14,7 @@ import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
 import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
 import { listReviews, createReview, binReview } from './lib/reviews.mjs';
-import { listTasks, createTask, setTaskDone } from './lib/tasks.mjs';
+import { listTasks, createTask, editTask, setTaskDone } from './lib/tasks.mjs';
 import { getDaily, setDaily, listEvents, createEvent, deleteEvent } from './lib/daily.mjs';
 import { listProjects, createProject, patchProject, binProject } from './lib/projects.mjs';
 import { listEntries, addEntry, removeEntry } from './lib/finance.mjs';
@@ -90,7 +90,11 @@ async function api(req, res, url) {
   if (p === '/api/tasks' && m === 'GET') return json(res, 200, listTasks());
   if (p === '/api/tasks' && m === 'POST') return json(res, 200, createTask(await readBody(req)));
   let r = p.match(/^\/api\/tasks\/([^/]+)$/);
-  if (r && m === 'PATCH') { const b = await readBody(req); return json(res, 200, setTaskDone(decodeURIComponent(r[1]), !!b.done)); }
+  if (r && m === 'PATCH') {
+    const b = await readBody(req), tid = decodeURIComponent(r[1]);
+    if (['title', 'dueKey', 'time', 'priority', 'project', 'repeat'].some((k) => k in b)) return json(res, 200, editTask(tid, b)); // edit the task
+    return json(res, 200, setTaskDone(tid, !!b.done)); // tick or untick it
+  }
   // daily text + appointments
   if (p === '/api/daily' && m === 'GET') return json(res, 200, getDaily(q.get('date')));
   if (p === '/api/daily' && m === 'POST') return json(res, 200, setDaily(await readBody(req)));

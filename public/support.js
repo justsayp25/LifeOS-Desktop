@@ -96,6 +96,47 @@
     if (/^(no|nope|nah|cancel|don't|do not|stop|never mind|nevermind|negative|wrong)\b/.test(s)) return false;
     return null;
   };
+  // ---- edit a task: tap its title anywhere a task is listed. Changes the task in its note (PATCH /api/tasks/:id). ----
+  vault.editTask = async (t) => {
+    if (!t || !t.id || document.getElementById('lifeos-edit')) return;
+    const mk = (tag, css, attrs) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+    const FIELD = 'width:100%;box-sizing:border-box;height:44px;padding:0 12px;border-radius:12px;background:#222;border:1px solid #333;color:#F5F5F5;font:inherit;font-size:15px;color-scheme:dark;';
+    const LAB = 'font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;color:#8A8A8A;margin:12px 0 5px;display:block;';
+    const root = mk('div', 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;', { id: 'lifeos-edit' });
+    const scrim = mk('button', 'position:absolute;inset:0;border:0;padding:0;background:rgba(0,0,0,.55);cursor:default;', { type: 'button', 'aria-label': 'Close' });
+    const box = mk('div', 'position:relative;width:100%;max-width:480px;max-height:92vh;overflow:auto;box-sizing:border-box;padding:18px 16px calc(18px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;background:#1A1A1A;border:1px solid #333;color:#F5F5F5;font-family:"IBM Plex Sans",sans-serif;', { role: 'dialog', 'aria-label': 'Edit task' });
+    const head = mk('div', 'font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:18px;'); head.textContent = 'Edit task';
+    const field = (label, el) => { const l = mk('label', LAB); l.textContent = label; box.appendChild(l); box.appendChild(el); return el; };
+    box.appendChild(head);
+    const title = field('TITLE', mk('input', FIELD, { type: 'text', 'aria-label': 'Task title', maxlength: '300' })); title.value = t.title || '';
+    const due = field('DUE DATE', mk('input', FIELD, { type: 'date', 'aria-label': 'Due date' })); due.value = t.dueKey || '';
+    const time = field('TIME (needs a due date)', mk('input', FIELD, { type: 'time', 'aria-label': 'Time' })); time.value = t.time || '';
+    const sel = (opts, cur, label) => { const s2 = mk('select', FIELD, { 'aria-label': label }); opts.forEach(([v, n]) => { const o = mk('option'); o.value = v; o.textContent = n; if (v === cur) o.selected = true; s2.appendChild(o); }); return s2; };
+    const pri = field('PRIORITY', sel([['', 'None'], ['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']], t.priority || '', 'Priority'));
+    const rep = field('REPEAT', sel([['', 'Never'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']], t.repeat || '', 'Repeat'));
+    let names = []; try { names = ((await vault.get('/api/projects')).projects || []).map((p) => p.name).filter(Boolean); } catch (e) {}
+    const proj = field('PROJECT', sel([['', 'None']].concat(names.map((n) => [n, n])), t.project || '', 'Project'));
+    const err = mk('div', 'min-height:18px;margin-top:10px;font-size:13px;color:#E08A82;', { role: 'alert' });
+    const row = mk('div', 'display:flex;gap:10px;margin-top:8px;');
+    const save = mk('button', 'flex:1;min-height:48px;border:0;border-radius:999px;background:#F5F5F5;color:#121212;font:inherit;font-size:15px;font-weight:700;cursor:pointer;', { type: 'button' }); save.textContent = 'Save';
+    const cancel = mk('button', 'flex:1;min-height:48px;border-radius:999px;background:#222;border:1px solid #333;color:#D0D0D0;font:inherit;font-size:15px;cursor:pointer;', { type: 'button' }); cancel.textContent = 'Cancel';
+    row.appendChild(save); row.appendChild(cancel); box.appendChild(err); box.appendChild(row);
+    root.appendChild(scrim); root.appendChild(box); document.body.appendChild(root);
+    const close = () => { try { root.remove(); } catch (e) {} document.removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } else if (e.key === 'Enter' && e.target === title) { e.preventDefault(); doSave(); } };
+    document.addEventListener('keydown', onKey, true);
+    scrim.onclick = close; cancel.onclick = close;
+    const doSave = async () => {
+      if (!title.value.trim()) { err.textContent = 'A task needs a title.'; title.focus(); return; }
+      save.disabled = true; save.style.opacity = '.55'; err.textContent = '';
+      try {
+        await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(t.id), { title: title.value, dueKey: due.value, time: due.value ? time.value : '', priority: pri.value, repeat: rep.value, project: proj.value });
+        close(); try { await (vault.reloadTasks && vault.reloadTasks()); } catch (e) {}
+      } catch (e) { err.textContent = (e && e.message) || "That didn't save."; save.disabled = false; save.style.opacity = ''; }
+    };
+    save.onclick = doSave;
+    setTimeout(() => { try { title.focus(); title.select(); } catch (e) {} }, 60);
+  };
   vault.newChat = () => sset('');
   // Sends a photo or file picked in the chat to the vault (Photos or PDFs). Resolves { file: { name, path, ... } }.
   vault.upload = (file) => new Promise((resolve, reject) => {
