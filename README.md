@@ -36,7 +36,7 @@ The sidebar says "vault connected" when the link works.
 Hevy and Strava. Samsung Health numbers come from the phone app (`/api/health/phone`).
 
 ## Claude chat
-The Agent button runs Claude Code on this computer, read-only inside the vault, with web search. Install Claude Code and run `claude` once to sign in. Needs this computer on.
+The Agent button runs Claude Code on this computer, read-only inside the vault, with web search. She can propose a few small changes (add a task, mark one done, tick a habit, add a capture, add an event); each one shows as a card and nothing is written until you press Yes (or say yes in conversation mode). Install Claude Code and run `claude` once to sign in. Needs this computer on.
 
 ## Phone
 Without a home server the phone can only reach this on the same Wi-Fi with `HOST=0.0.0.0` in `.env`. There is no password yet, so only do that on a network you trust. Once open on the phone, "Add to Home screen" installs it.
