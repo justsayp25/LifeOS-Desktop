@@ -19,7 +19,9 @@
   const timing = {};
   // Some GPU/dtype combinations (q4f16 on this PC's RTX 3050) return all-NaN audio: silent speech. Always check.
   const valid = (raw) => { try { const a = raw && raw.audio; if (!a || !a.length) return false; let mx = 0; for (let i = 0; i < a.length; i += 7) { const v = a[i]; if (v !== v) return false; if (v > mx) mx = v; else if (-v > mx) mx = -v; } return mx > 0.01; } catch (e) { return false; } };
-  const hasGpu = async () => { try { return !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) { return false; } };
+  // WebGPU only in Chrome/Edge (userAgentData is Chromium-only). Firefox reports navigator.gpu but the models hang there,
+  // so Firefox uses Whisper tiny on wasm and the browser's own voice.
+  const hasGpu = async () => { try { return !!(navigator.userAgentData && navigator.gpu && await navigator.gpu.requestAdapter()); } catch (e) { return false; } };
   let ctx = null;
   let player = { gen: 0, src: null };
   let mic = null;
@@ -37,13 +39,20 @@
       const m = await import(TJS);
       const t0 = performance.now();
       let p = null;
+      console.info('[renee] whisper: checking WebGPU');
       if (await hasGpu()) {
         try {
-          p = await m.pipeline('automatic-speech-recognition', WHISPER_GPU, { device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback: prog(stt) });
-          await p(new Float32Array(16000), { chunk_length_s: 30 });
+          const gpu = (async () => {
+            const q = await m.pipeline('automatic-speech-recognition', WHISPER_GPU, { device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback: prog(stt) });
+            console.info('[renee] whisper downloaded, warming up WebGPU');
+            await q(new Float32Array(16000), { chunk_length_s: 30 });
+            return q;
+          })();
+          gpu.catch(() => {});
+          p = await Promise.race([gpu, new Promise((_, rej) => setTimeout(() => rej(new Error('WebGPU setup took over 75 s')), 75000))]);
           stt.device = 'webgpu';
-        } catch (e) { console.warn('whisper webgpu failed, using wasm', e && e.message); p = null; }
-      }
+        } catch (e) { console.warn('whisper webgpu failed, using wasm:', e && e.message); p = null; }
+      } else console.info('[renee] no WebGPU adapter, whisper will use wasm');
       if (!p) {
         p = await m.pipeline('automatic-speech-recognition', WHISPER_CPU, { dtype: 'q8', device: 'wasm', progress_callback: prog(stt) });
         stt.device = 'wasm';
@@ -59,18 +68,25 @@
     if (tts.promise) return tts.promise;
     tts.state = 'loading';
     tts.promise = (async () => {
-      if (!(await hasGpu())) throw new Error('no WebGPU: Kokoro on wasm is slower than real time, using the browser voice');
       const m = await import(KOKORO);
       const t0 = performance.now();
+      const gpu = await hasGpu();
+      // Pick the best engine this browser can run: WebGPU (Chrome/Edge), else wasm (any browser, several threads when the
+      // page is cross-origin isolated). The wasm engine must pass a speed check, otherwise the browser's own voice is used.
+      const plans = gpu ? [['webgpu', 'fp32'], ['webgpu', 'q4f16'], ['wasm', 'q8']] : [['wasm', 'q8']];
       let e = null, last = null;
-      for (const dtype of ['fp32', 'q4f16']) {
+      for (const [device, dtype] of plans) {
         try {
-          e = await m.KokoroTTS.from_pretrained(KOKORO_MODEL, { dtype, device: 'webgpu', progress_callback: prog(tts) });
-          if (!valid(await e.generate('Ready to go.', { voice: VOICES[0] }))) throw new Error('silent (NaN) audio with ' + dtype);
-          tts.device = 'webgpu ' + dtype; break;
-        } catch (err) { console.warn('kokoro', dtype, 'failed:', err && err.message); last = err; e = null; }
+          e = await m.KokoroTTS.from_pretrained(KOKORO_MODEL, { dtype, device, progress_callback: prog(tts) });
+          const g0 = performance.now();
+          const raw = await e.generate('Ready to go, one two three.', { voice: VOICES[0] });
+          if (!valid(raw)) throw new Error('silent (NaN) audio with ' + device + ' ' + dtype);
+          const rtf = (performance.now() - g0) / ((raw.audio.length / raw.sampling_rate) * 1000);
+          if (device === 'wasm' && rtf > 2.2) throw new Error('too slow on wasm (' + rtf.toFixed(1) + 'x real time), using the browser voice');
+          tts.device = device + ' ' + dtype; tts.rtf = rtf; break;
+        } catch (err) { console.warn('kokoro', device, dtype, 'failed:', err && err.message); last = err; e = null; }
       }
-      if (!e) throw last || new Error('kokoro webgpu failed');
+      if (!e) throw last || new Error('kokoro failed');
       timing.ttsLoad = Math.round(performance.now() - t0);
       return e;
     })()
@@ -275,7 +291,10 @@
     if (!stt.pipe && !stt.failed) {
       const iv = setInterval(() => cb.status('loading', stt.progress), 400);
       cb.status('loading', stt.progress);
-      try { await loadStt(); } catch (e) { clearInterval(iv); if (myGen === listenGen) cb.error('stt-failed'); return false; }
+      // If setup takes more than 90 s, give up waiting and use the browser's own listening (loading carries on in the background).
+      let slow = false;
+      try { await Promise.race([loadStt(), new Promise((_, rej) => setTimeout(() => { slow = true; rej(new Error('timeout')); }, 90000))]); }
+      catch (e) { clearInterval(iv); if (slow) console.warn('[renee] whisper setup slow, using browser listening this time'); if (myGen === listenGen) cb.error('stt-failed'); return false; }
       clearInterval(iv);
     }
     if (myGen !== listenGen) return false;
