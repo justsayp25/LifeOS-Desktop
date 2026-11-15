@@ -136,6 +136,7 @@
   // Strip markdown and links so the voice reads clean sentences.
   function clean(text) {
     return String(text || '')
+      .replace(/\bR\.?\s?E\.?\s?N\.?\s?E\.?\s?E\b\.?/gi, 'Renay') // her name is pronounced Renay, not spelled out
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/`([^`]*)`/g, '$1')
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
