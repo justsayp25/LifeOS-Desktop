@@ -2,6 +2,7 @@
 import { chatStatus, chatAsk } from './lib/chat.mjs';
 import { agentUpload } from './lib/agent.mjs';
 import { voiceAsk, voiceWarm, voiceReset } from './lib/voice.mjs';
+import { gitStatus, gitSyncRun } from './lib/gitsync.mjs';
 import { nativeStatus, nativeWarm, nativeStt, nativeTts } from './lib/voicenative.mjs';
 import { phoneHealthList, phoneHealthSave } from './lib/phonehealth.mjs';
 import * as sync from './lib/sync.mjs';
@@ -63,6 +64,8 @@ async function api(req, res, url) {
   const p = url.pathname, q = url.searchParams, m = req.method;
   if (p === '/api/chat/status' && m === 'GET') return json(res, 200, await chatStatus());
   if (p === '/api/agent/upload' && m === 'POST') return json(res, 200, agentUpload(await readBody(req, 30_000_000)));
+  if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());
+  if (p === '/api/gitsync/run' && m === 'POST') return json(res, 200, await gitSyncRun());
   if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
   if (p === '/api/voice/stt' && m === 'POST') return json(res, 200, await nativeStt(await readRaw(req, 4_000_000)));
   if (p === '/api/voice/tts' && m === 'POST') { const r = await nativeTts(await readBody(req, 20_000)); return send(res, 200, r.buf, { 'Content-Type': 'application/octet-stream', 'X-Sample-Rate': String(r.sampleRate) }); }

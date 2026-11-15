@@ -6,6 +6,7 @@ import { chatStatus, chatAsk } from '../lib/chat.mjs';
 import { agentUpload } from '../lib/agent.mjs';
 import { voiceAsk, voiceWarm } from '../lib/voice.mjs';
 import { phoneHealthList, phoneHealthSave } from '../lib/phonehealth.mjs';
+import { gitStatus, gitSyncRun } from '../lib/gitsync.mjs';
 import { nativeStatus, nativeWarm, nativeStt, nativeTts } from '../lib/voicenative.mjs';
 import { env, HttpError } from '../lib/vault.mjs';
 
@@ -40,6 +41,8 @@ http.createServer(async (req, res) => {
     // Samsung Health numbers from the phone app (Health Connect). Same code and note as the dashboard's /api/health/phone.
     if (p === '/health' && req.method === 'GET') return json(res, 200, phoneHealthList((req.url.split('?')[1] || '').match(/days=(\d+)/)?.[1]));
     if (p === '/health' && req.method === 'POST') return json(res, 200, phoneHealthSave(await readBody(req, 10_000)));
+    if (p === '/gitsync/status' && req.method === 'GET') return json(res, 200, await gitStatus());
+    if (p === '/gitsync/run' && req.method === 'POST') return json(res, 200, await gitSyncRun());
     // Voice: same engine and same answers as the dashboard on the PC (see lib/voicenative.mjs and lib/voice.mjs).
     if (p === '/voice/native' && req.method === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
     if (p === '/voice/stt' && req.method === 'POST') return json(res, 200, await nativeStt(await readRaw(req, 4_000_000)));
