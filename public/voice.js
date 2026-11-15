@@ -265,6 +265,10 @@
     sp.feed(text + ' '); sp.end();
     return true;
   }
+  // The page the user is looking at (title and visible text), so she can answer "what's on my screen?". Sent only to this computer's server.
+  function screenText() {
+    try { return ((document.title || '') + ': ' + (document.body ? document.body.innerText : '')).replace(/\s+/g, ' ').slice(0, 2500); } catch (e) { return ''; }
+  }
   // Ask on the fast voice path and speak the answer while it streams.
   // cb: { text(t), tool(), spoken(), error(msg), fallback(), timing(str) }
   function ask(text, cb) {
@@ -286,7 +290,7 @@
     };
     (async () => {
       let r;
-      try { r = await fetch('/api/voice/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal: ac.signal }); }
+      try { r = await fetch('/api/voice/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, screen: screenText() }), signal: ac.signal }); }
       catch (e) { if (!finished) fail("Couldn't reach the server. Is the LifeOS window still open?"); return; }
       if (r.status === 404 || r.status === 405) { finished = true; if (current === me) current = null; cb.fallback && cb.fallback(); return; }
       if (!r.ok) { let m = 'That did not work. Try again.'; try { m = (await r.json()).error || m; } catch (e) {} return fail(m); }

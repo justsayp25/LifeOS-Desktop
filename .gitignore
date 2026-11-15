@@ -19,3 +19,4 @@ Thumbs.db
 # optional native voice engine (installed by setup-voice.bat)
 voice-native/node_modules/
 voice-models/
+.memory/
