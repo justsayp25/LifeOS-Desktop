@@ -428,7 +428,8 @@ class Component extends DCLogic {
     const taskDefs = [
       ...added
     ];
-    const tasks = taskDefs.map((t) => {
+    // finished tasks are not listed (they stay checked in their note); only open ones show
+    const tasks = taskDefs.filter((t) => !taskDone[t.id]).map((t) => {
       const isDone = !!taskDone[t.id];
       const overdue = !!t.dueKey && !isDone && t.dueKey < todayKey;
       return {
