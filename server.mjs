@@ -9,6 +9,7 @@ import * as sync from './lib/sync.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
 import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
 import { listReviews, createReview, binReview } from './lib/reviews.mjs';
@@ -64,6 +65,8 @@ async function api(req, res, url) {
   const p = url.pathname, q = url.searchParams, m = req.method;
   if (p === '/api/chat/status' && m === 'GET') return json(res, 200, await chatStatus());
   if (p === '/api/agent/upload' && m === 'POST') return json(res, 200, agentUpload(await readBody(req, 30_000_000)));
+  if (p === '/api/autosync' && m === 'GET') return json(res, 200, autosyncStatus());
+  if (p === '/api/autosync' && m === 'POST') { const b = await readBody(req, 2000); return json(res, 200, autosyncSet(!!(b && b.on))); }
   if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());
   if (p === '/api/gitsync/run' && m === 'POST') return json(res, 200, await gitSyncRun());
   if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
@@ -171,4 +174,5 @@ server.listen(PORT, HOST, () => {
   console.log(`Vault: ${VAULT}`);
   if (HOST !== '127.0.0.1' && HOST !== 'localhost') console.log('Phone sync is on: other devices on this network can reach the sync only (not the dashboard). Pair a phone at http://localhost:' + PORT + '/sync.html');
   if (!exists(path.join(VAULT, '1 Human'))) console.log('WARNING: no "1 Human" folder found there. Check VAULT_PATH in .env.');
+  startAutosync();
 });
