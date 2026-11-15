@@ -137,6 +137,12 @@
       <span style="font-size: 13px;">Bin</span>
     </div>
 
+    <button type="button" onClick="{{syncVault}}" aria-label="Sync the vault with GitHub" style="display: flex; align-items: center; gap: 11px; width: 100%; padding: 7px 10px; color: #B5B5B5; background: none; border: 0; cursor: pointer; font: inherit; text-align: left;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 15 6.7L21 16"></path><path d="M16 16h5v5"></path></svg>
+      <span style="font-size: 13px;">{{syncLabel}}</span>
+    </button>
+    <sc-if value="{{hasSyncMsg}}" hint-placeholder-val="{{ false }}"><div style="padding: 0 10px 8px 37px; font-size: 11.5px; line-height: 1.45; color: #8A8A8A;">{{syncMsg}}</div></sc-if>
+
     <div style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; background: #1A1A1A; border: 1px solid #292929;">
       <span style="width: 6px; height: 6px; border-radius: 50%; background: #A0A0A0;"></span>
       <span data-vstat style="font-size: 11.5px; color: #8A8A8A; font-family: 'IBM Plex Mono', monospace;">synced to github · 2m ago</span>
@@ -435,6 +441,20 @@ class Component extends DCLogic {
       });
     };
     go();
+  }
+  // Sidebar "Sync vault": saves changes here, brings the other device's, sends ours. The newer edit keeps a note's name; nothing is overwritten or deleted.
+  async _doSync() {
+    if ((this.state || {}).syncBusy) return;
+    this.setState({ syncBusy: true, syncMsg: '' });
+    let msg;
+    try {
+      const r = await fetch('/api/gitsync/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) msg = j.error || 'Sync did not finish.';
+      else msg = (j.pulled ? 'Received changes. ' : 'Nothing new to receive. ') + (j.pushed ? 'Sent your changes.' : 'Nothing to send.') + (j.conflicts && j.conflicts.length ? ' Both versions kept for ' + j.conflicts.length + ' note(s).' : '');
+    } catch (e) { msg = 'Sync did not run.'; }
+    this.setState({ syncBusy: false, syncMsg: msg });
+    try { setTimeout(() => this.setState({ syncMsg: '' }), 15000); } catch (e) {}
   }
   _vsyncH() {
     const pad = (n) => String(n).padStart(2, '0');
@@ -809,6 +829,7 @@ class Component extends DCLogic {
       toggleAreas: () => this.setState({ areasOpen: (this.state || {}).areasOpen === false }),
       toggleKnowledge: () => this.setState({ knowledgeOpen: (this.state || {}).knowledgeOpen === false }),
       toggleSidebar: () => this.setState({ sidebarOpen: (this.state || {}).sidebarOpen === false }),
+      syncVault: () => this._doSync(), syncLabel: s.syncBusy ? 'Syncing…' : 'Sync vault', syncMsg: s.syncMsg || '', hasSyncMsg: !!s.syncMsg,
       clock, meridiem, dateLine, monthLabel,
       calOpen, calClosed: !calOpen, showToday: calOpen && offset !== 0,
       toggleCal: () => this.setState({ calOpen: !(this.state && this.state.calOpen), monthOffset: 0 }),
