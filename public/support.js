@@ -208,6 +208,7 @@
       if (hasHole) v = isWhole(raw) ? lookup(raw.replace(/^\s*\{\{|\}\}\s*$/g, ''), scope) : interp(raw, scope);
       if (name === 'value' && (tag === 'input' || tag === 'textarea' || tag === 'select')) { el.value = v == null ? '' : String(v); el.setAttribute('value', el.value); continue; }
       if (name === 'checked' && tag === 'input') { el.checked = !!v; continue; }
+      if (name === 'data-lsrc') { if (v) el.setAttribute('src', String(v)); continue; } // an image whose address is filled in later: the browser must not fetch the unfilled template text (it made a failing request on 10 pages)
       if (v === false || v == null) { if (/^(aria-|data-)/.test(name) && v === false) el.setAttribute(name, 'false'); continue; }
       el.setAttribute(name, v === true ? (/^(aria-|data-)/.test(name) ? 'true' : '') : String(v));
     }
