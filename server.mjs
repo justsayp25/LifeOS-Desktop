@@ -138,7 +138,7 @@ function serveStatic(req, res, url) {
   const abs = path.join(PUBLIC, path.normalize(p));
   if (!abs.startsWith(PUBLIC + path.sep) || !exists(abs) || fs.statSync(abs).isDirectory()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' });
   // no-cache = the app asks again every time (cheap on this device), so a page that was updated is never shown from an old copy
-  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': p.startsWith('/fonts/') ? 'public, max-age=31536000, immutable' : 'no-cache' });
 }
 
 // Optional idle stop (phone): IDLE_EXIT_MIN in .env. The server exits after that many minutes with no request at all.

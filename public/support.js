@@ -270,7 +270,7 @@
     return false;
   }
   const fit = document.createElement('style');
-  fit.textContent = '*{-webkit-tap-highlight-color:transparent} :focus:not(:focus-visible){outline:none} html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
+  fit.textContent = '@view-transition{navigation:auto} ::view-transition-group(root){animation-duration:.14s} *{-webkit-tap-highlight-color:transparent} :focus:not(:focus-visible){outline:none} html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
   document.head.appendChild(fit);
   const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; document.head.appendChild(meta);
   const man = document.createElement('link'); man.rel = 'manifest'; man.href = '/manifest.webmanifest'; document.head.appendChild(man);
