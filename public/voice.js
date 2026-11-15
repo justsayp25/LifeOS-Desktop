@@ -370,6 +370,9 @@
         let o = 0; for (const a of chunks) { all.set(a, o); o += a.length; }
         const r = await pipe(downsample(all, c.sampleRate, 16000), { chunk_length_s: 30, return_timestamps: false });
         timing.stt = Math.round(performance.now() - tt0);
+        // Whisper invents words on room noise ("Thank you.", "you", "Bye."). Treat those as nothing heard.
+        const heardText = String((r && r.text) || '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim();
+        if (!/[a-z0-9]/i.test(heardText) || /^(thank you[.! ]*|thanks[.! ]*|thanks for watching[.! ]*|you[.! ]*|bye[.! ]*|okay[.! ]*|uh[.! ]*|um[.! ]*|hmm+[.! ]*|the[.! ]*)$/i.test(heardText)) { cb.text(''); return; }
         cb.text(String((r && r.text) || '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim()); // drop [BLANK_AUDIO] style tags
       } catch (e) { cb.error('stt-failed'); }
     };
@@ -386,7 +389,7 @@
       t += ms;
       if (on) { if (!heard) { heard = true; cb.status('hearing'); } speechMs += ms; silentMs = 0; }
       else if (heard) silentMs += ms; else idleMs += ms;
-      if (heard && silentMs > SILENCE_MS && speechMs > 250) done(true);
+      if (heard && silentMs > SILENCE_MS && speechMs > 400) done(true);
       else if (!heard && idleMs > 9000) done(false);
       else if (t > 40000) done(heard);
     };

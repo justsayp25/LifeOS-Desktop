@@ -652,9 +652,9 @@ class Component extends DCLogic {
       const live = () => !!((this.state || {}).talk);
       R.ask(text, {
         text: (t) => { if (live()) this.setState({ talk: 'speaking', talkText: t }); },
-        done: (reply) => { const cur = ((this.state && this.state.msgs) || []).slice(); cur.push({ role: 'user', text }, { role: 'agent', text: reply }); this.setState({ msgs: cur }); },
+        done: () => {}, // spoken conversation is not added to the chat list (it is still saved as a transcript in the vault)
         spoken: () => { if (((this.state || {}).talk) === 'speaking') talkListen(); },
-        timing: (line) => { if (live()) this.setState({ voiceNote: line }); },
+        timing: () => {}, // the timing line is in the console only ([renee timing])
         error: (msg) => { if (live()) this.setState({ talk: '', talkText: '', voiceNote: msg }); },
         fallback: () => { if (live()) talkAskSlow(text); },
       });
@@ -695,7 +695,7 @@ class Component extends DCLogic {
     };
     const atts = (s.atts || []).map((a, i) => ({ name: a.name, remove: () => this.setState({ atts: (((this.state || {}).atts) || []).filter((_, j) => j !== i) }) }));
     const talk = s.talk || '';
-    const TALK = { listening: ['Listening', 'Your words appear here.', '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Searching the vault and the web.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'The answer appears here while it is read out.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
+    const TALK = { listening: ['Listening', "Speak when you're ready.", '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Searching the vault and the web.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'Tap Interrupt to stop her.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
     const tv = TALK[talk] || TALK.listening;
     const hasDraft = !!((s.draft || '').trim()) || atts.length > 0;
     const startVoice = () => {
@@ -840,7 +840,7 @@ class Component extends DCLogic {
       atts, hasAtts: atts.length > 0, attachOpen: !!s.attachOpen, showSend: hasDraft, noSend: !hasDraft,
       toggleAttach: () => this.setState({ attachOpen: !(this.state || {}).attachOpen }),
       pickCam: addFiles, pickPhoto: addFiles, pickFile: addFiles,
-      talkOn: !!talk, talkLabel: tv[0], talkCaption: String(s.talkText || tv[1]).slice(0, 400), orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
+      talkOn: !!talk, talkLabel: tv[0], talkCaption: tv[1], orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
       toggleTalk: () => { stopVoice(); talkStop(); if ((this.state || {}).talk) this.setState({ talk: '' }); else { this.setState({ chatOpen: true, attachOpen: false }); try { RV() && RV().preload(); } catch (err) {} talkListen(); } },
       cycleTalk: () => { const c = (this.state || {}).talk; if (c === 'listening') { try { if (this._rec) this._rec.stop(); else if (RV()) RV().finishListen(); } catch (err) {} } else if (c === 'speaking') { talkStop(); talkListen(); } },
       voiceName: String(RV() && !RV().tts.failed ? RV().voiceId().replace(/^[a-z]{2}_/, '').replace(/^./, (c) => c.toUpperCase()) : (s.voiceName || (chosenVoice() || {}).name || 'default')).replace(/^Microsoft\s+/, '').replace(/\s+-\s+English.*$/, '').slice(0, 32),
