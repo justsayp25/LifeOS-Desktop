@@ -684,7 +684,7 @@ class Component extends DCLogic {
           else if (st === 'hearing') this.setState({ talkText: 'Listening...' });
           else if (st === 'thinking') this.setState({ talkText: 'Transcribing...' });
         },
-        text: (t) => { if (!((this.state || {}).talk)) return; t = (t || '').trim(); if (!t) { this.setState({ talk: '', voiceNote: "Didn't catch that. Tap the orb and try again." }); return; } talkAsk(t); },
+        text: (t) => { if (!((this.state || {}).talk)) return; t = (t || '').trim(); if (!t) { this._empty = (this._empty || 0) + 1; if (this._empty < 3) { talkListen(); return; } this._empty = 0; this.setState({ talk: '', voiceNote: "Didn't hear anything. Tap the orb to start again." }); return; } this._empty = 0; talkAsk(t); },
         error: (code) => {
           if (!((this.state || {}).talk)) return;
           if (code === 'blocked') this.setState({ talk: '', voiceNote: 'The microphone is blocked. Allow it in the browser.' });

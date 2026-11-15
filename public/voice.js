@@ -332,6 +332,8 @@
     catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
     if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
     const c = audioCtx(); try { await c.resume(); } catch (e) {}
+    await new Promise((r) => setTimeout(r, 350)); // let the end of her own voice die away so it is not heard as speech
+    if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
     const src = c.createMediaStreamSource(stream);
     const proc = c.createScriptProcessor(4096, 1, 1);
     const m = { stream, src, proc, cancelled: false };
