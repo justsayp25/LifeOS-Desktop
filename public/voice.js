@@ -27,6 +27,18 @@
   let mic = null;
   let listenGen = 0;
 
+  // Playback has its own audio context (steady, larger buffers) and is kept awake with an inaudible signal while a conversation is
+  // running: otherwise the sound card or Bluetooth link goes to sleep between sentences and wakes up with a cut-off, quiet start.
+  let pctx = null, keepAlive = null, awakeTimer = null;
+  const playCtx = () => { if (!pctx) { const A = window.AudioContext || window.webkitAudioContext; try { pctx = new A({ latencyHint: 'playback' }); } catch (e) { pctx = new A(); } } return pctx; };
+  function outSleep() { clearTimeout(awakeTimer); awakeTimer = null; try { keepAlive && keepAlive.stop(); } catch (e) {} keepAlive = null; }
+  function outAwake() {
+    try {
+      const c = playCtx(); c.resume();
+      if (!keepAlive) { const b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.00004; const n = c.createBufferSource(); n.buffer = b; n.loop = true; n.connect(c.destination); n.start(); keepAlive = n; }
+      clearTimeout(awakeTimer); awakeTimer = setTimeout(outSleep, 25000);
+    } catch (e) {}
+  }
   const audioCtx = () => { if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; ctx = new A(); } return ctx; };
   const prog = (o) => (p) => { if (p && typeof p.progress === 'number') o.progress = Math.round(p.progress); };
 
@@ -165,13 +177,23 @@
   function playBuffer(raw, gen) {
     return new Promise((resolve) => {
       if (gen !== player.gen) return resolve();
-      const c = audioCtx();
-      const b = c.createBuffer(1, raw.audio.length, raw.sampling_rate);
-      b.copyToChannel(raw.audio, 0);
+      outAwake();
+      const c = playCtx();
+      // Every sentence is brought to the same loudness (the voices differ from sentence to sentence), starts and ends with a short
+      // fade so there are no clicks, and has a little silence in front so the first word is not clipped when the output wakes up.
+      const a = raw.audio; let sum = 0, pk = 0;
+      for (let i = 0; i < a.length; i++) { const v = a[i]; sum += v * v; const w = v < 0 ? -v : v; if (w > pk) pk = w; }
+      const rms = Math.sqrt(sum / Math.max(1, a.length)) || 1e-6;
+      let gain = Math.min(3, 0.09 / rms); if (pk * gain > 0.92) gain = 0.92 / (pk || 1);
+      const pad = Math.round(raw.sampling_rate * 0.06), tailPad = Math.round(raw.sampling_rate * 0.05), fade = Math.round(raw.sampling_rate * 0.008);
+      const out = new Float32Array(pad + a.length + tailPad);
+      for (let i = 0; i < a.length; i++) { let g = gain; if (i < fade) g *= i / fade; else if (i > a.length - fade) g *= (a.length - i) / fade; out[pad + i] = a[i] * g; }
+      const b = c.createBuffer(1, out.length, raw.sampling_rate);
+      b.copyToChannel(out, 0);
       const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination);
       s.onended = () => { if (player.src === s) player.src = null; resolve(); };
       player.src = s;
-      try { c.resume(); s.start(); } catch (e) { resolve(); }
+      try { s.start(); } catch (e) { resolve(); }
     });
   }
   // Browser voice, one sentence. Same ranking and saved choice as the pages use.
@@ -313,6 +335,22 @@
     const k = kept; kept = null;
     try { k && k.getTracks().forEach((t) => t.stop()); } catch (e) {}
   }
+  // A Bluetooth headset's microphone forces the headset into low-quality "hands-free call" sound while it is open. If the chosen microphone is
+  // a Bluetooth one and the computer has another (built-in or USB), listen with that one instead, so the headset keeps its high-quality sound.
+  async function preferOtherMic(stream) {
+    try {
+      const BT = /bluetooth|hands-?free|airpods|buds/i;
+      const cur = stream.getAudioTracks()[0];
+      if (!cur || !BT.test(cur.label || '')) return stream;
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+      const alt = devs.find((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label && !BT.test(d.label));
+      if (!alt) return stream;
+      const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: alt.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+      try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      console.info('[renee] microphone:', alt.label, '(not the Bluetooth headset, so its sound stays high quality)');
+      return s2;
+    } catch (e) { return stream; }
+  }
   const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live');
   function stopListen(keepOpen) {
     listenGen++;
@@ -327,6 +365,7 @@
   async function listen(cb) {
     stopListen(true);
     const myGen = listenGen;
+    outAwake(); // keep the speakers/headset awake for the whole conversation
     if (!stt.pipe && !stt.failed) {
       const iv = setInterval(() => cb.status('loading', stt.progress), 400);
       cb.status('loading', stt.progress);
@@ -347,6 +386,8 @@
       // and degrades her voice. She never listens while she is speaking, so there is no echo to cancel.
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }); }
       catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
+      if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
+      stream = await preferOtherMic(stream);
       if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
       kept = stream;
     }
