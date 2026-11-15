@@ -227,7 +227,7 @@ class Component extends DCLogic {
       setTimeout(go, 40);
     } catch (e) {}
     this.setState({ now: Date.now() });
-    this._tick = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    this._tick = setInterval(() => this._tickClock(), 1000);
   }
   componentWillUnmount() {
     if (this._tick) clearInterval(this._tick);

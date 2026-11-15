@@ -15,6 +15,16 @@
     forceUpdate(cb) { this._schedule(cb); }
     _schedule(cb) { if (this._r) this._r(cb); }
   }
+  // The pages used to redraw EVERYTHING every second just to move the clock (about 50 ms of work each time on a slowed-down phone CPU).
+  // Now the seconds are written straight into the clock text, and the page is redrawn only when the minute changes.
+  DCLogic.prototype._tickClock = function () {
+    const now = Date.now(), last = (this.state && this.state.now) || 0;
+    if (!last || Math.floor(now / 60000) !== Math.floor(last / 60000)) { this.setState({ now }); return; }
+    this.state.now = now; // a later redraw (a tap, a sync) then already has the right time
+    const d = new Date(now), pad = (n) => String(n).padStart(2, '0'), h = d.getHours();
+    const txt = pad(this.props && this.props.hour12 === false ? h : (h % 12 || 12)) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    for (const e of document.querySelectorAll('[data-live-clock]')) if (e.textContent !== txt) e.textContent = txt;
+  };
   window.DCLogic = DCLogic;
 
   // ---------- vault bridge ----------
@@ -260,7 +270,7 @@
     return false;
   }
   const fit = document.createElement('style');
-  fit.textContent = 'html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
+  fit.textContent = '*{-webkit-tap-highlight-color:transparent} :focus:not(:focus-visible){outline:none} html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
   document.head.appendChild(fit);
   const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; document.head.appendChild(meta);
   const man = document.createElement('link'); man.rel = 'manifest'; man.href = '/manifest.webmanifest'; document.head.appendChild(man);

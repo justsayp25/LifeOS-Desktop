@@ -164,7 +164,7 @@
 
       <header style="padding: 2px 2px 4px;">
         <div style="display: flex; align-items: baseline; gap: 12px;">
-          <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 64px; line-height: 1; letter-spacing: -0.02em; color: #F5F5F5;">{{clock}}</span>
+          <span data-live-clock="1" style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 64px; line-height: 1; letter-spacing: -0.02em; color: #F5F5F5;">{{clock}}</span>
           <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 22px; color: #8A8A8A;">{{meridiem}}</span>
         </div>
         <h1 style="margin-top: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 24px; color: #D8D8D8;">{{dateLine}}</h1>
@@ -437,7 +437,7 @@ class Component extends DCLogic {
     this._asLoad();
     try { const ld = () => { if (window.vault && window.vault.on) return; try { const v = JSON.parse(localStorage.getItem('lifeos.hdone') || 'null'); if (v && typeof v === 'object') this.setState({ hdone: v }); } catch (e) {} }; ld(); this._hst = (e) => { if (!e || e.key === 'lifeos.hdone') ld(); }; window.addEventListener('storage', this._hst); } catch (e) {}
     this.setState({ now: Date.now() });
-    this._tick = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    this._tick = setInterval(() => this._tickClock(), 1000);
   }
   componentWillUnmount() {
     try { if (this._vt) clearInterval(this._vt); if (this._vv) document.removeEventListener('visibilitychange', this._vv); } catch (e) {}
