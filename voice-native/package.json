@@ -1,0 +1,8 @@
+{
+  "name": "lifeos-voice-native",
+  "private": true,
+  "description": "Optional native voice engine (speech to text and text to speech). Installed by tools/setup-voice.mjs, not needed to run the dashboard.",
+  "dependencies": {
+    "sherpa-onnx-node": "1.12.20"
+  }
+}

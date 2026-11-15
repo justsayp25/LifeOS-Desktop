@@ -2,6 +2,7 @@
 import { chatStatus, chatAsk } from './lib/chat.mjs';
 import { agentUpload } from './lib/agent.mjs';
 import { voiceAsk, voiceWarm, voiceReset } from './lib/voice.mjs';
+import { nativeStatus, nativeWarm, nativeStt, nativeTts } from './lib/voicenative.mjs';
 import { phoneHealthList, phoneHealthSave } from './lib/phonehealth.mjs';
 import * as sync from './lib/sync.mjs';
 import http from 'node:http';
@@ -62,6 +63,9 @@ async function api(req, res, url) {
   const p = url.pathname, q = url.searchParams, m = req.method;
   if (p === '/api/chat/status' && m === 'GET') return json(res, 200, await chatStatus());
   if (p === '/api/agent/upload' && m === 'POST') return json(res, 200, agentUpload(await readBody(req, 30_000_000)));
+  if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
+  if (p === '/api/voice/stt' && m === 'POST') return json(res, 200, await nativeStt(await readRaw(req, 4_000_000)));
+  if (p === '/api/voice/tts' && m === 'POST') { const r = await nativeTts(await readBody(req, 20_000)); return send(res, 200, r.buf, { 'Content-Type': 'application/octet-stream', 'X-Sample-Rate': String(r.sampleRate) }); }
   if (p === '/api/voice/warm' && m === 'POST') return json(res, 200, await voiceWarm());
   if (p === '/api/voice/reset' && m === 'POST') return json(res, 200, voiceReset());
   if (p === '/api/voice/ask' && m === 'POST') return voiceAsk(await readBody(req, 20_000), req, res);

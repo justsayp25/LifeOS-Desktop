@@ -6,4 +6,6 @@
 3. Test: `curl -H "x-helper-token: $(cat helper/.token)" localhost:4200/status`
 4. Keep it alive: run `termux-wake-lock` in Termux and set Termux battery to Unrestricted.
 
+5. Voice (optional, fast): `node tools/setup-voice.mjs` once. The helper then serves `/voice/native`, `/voice/stt`, `/voice/tts`, `/voice/ask` (same token). Untested on the phone: time it first.
+
 Rules: listens on 127.0.0.1 only. Chat is read-only, web search on. Never share `helper/.token`.

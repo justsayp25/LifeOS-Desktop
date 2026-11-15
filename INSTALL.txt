@@ -9,6 +9,8 @@ LifeOS install (Windows)
 4. Your browser opens http://localhost:4100. The sidebar says "vault connected" when it works.
 5. Optional, for the Agent chat: install Claude Code, open a terminal, run: claude
    and sign in once.
+6. Optional, for a fast natural voice in conversation mode (any browser): double-click setup-voice.bat once.
+   It installs a small voice engine and downloads about 700 MB of speech models. Then restart start.bat.
 
 Updating later: unzip a newer package over the same folder. Your .env and your sync
 settings (.sync folder) are not in the zip, so they are kept.

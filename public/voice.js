@@ -12,7 +12,7 @@
   const WHISPER_CPU = 'Xenova/whisper-tiny.en';
   const SILENCE_MS = 700;
   const KOKORO_MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-  const VOICES = ['af_heart', 'af_bella', 'af_nicole', 'af_sarah', 'bf_emma', 'am_michael'];
+  let VOICES = ['af_heart', 'af_bella', 'af_nicole', 'af_sarah', 'bf_emma', 'am_michael'];
 
   const stt = { state: 'idle', pipe: null, promise: null, failed: false, progress: 0, device: '' };
   const tts = { state: 'idle', engine: null, promise: null, failed: false, progress: 0, device: '' };
@@ -32,10 +32,36 @@
 
   // The first run on WebGPU compiles shaders (15-20 s), so each loader finishes with a dummy run:
   // "ready" then really means ready.
+  // ---- native engine (optional, runs in the LifeOS server / phone helper; same on every browser and device) ----
+  // Whisper + Piper through sherpa-onnx. Used whenever the server has it installed (setup-voice.bat); it is much faster than
+  // anything that runs inside the page, and identical on the PC and the phone.
+  let nativeP = null;
+  function detectNative() {
+    if (nativeP) return nativeP;
+    let saved = ''; try { saved = localStorage.getItem('lifeos.voiceEngine') || ''; } catch (e) {}
+    nativeP = saved === 'browser' ? Promise.resolve(false)
+      : fetch('/api/voice/native').then((r) => r.json()).then((j) => { if (j && j.ok && j.voices && j.voices.length) { VOICES = j.voices.map((v) => v.id); return true; } return false; }).catch(() => false);
+    return nativeP;
+  }
+  const nativeStt = async (samples) => {
+    const r = await fetch('/api/voice/stt', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength) });
+    if (!r.ok) throw new Error('native stt ' + r.status);
+    return await r.json();
+  };
+  const nativeTts = {
+    async generate(text, o) {
+      const r = await fetch('/api/voice/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice: (o && o.voice) || '' }) });
+      if (!r.ok) throw new Error('native tts ' + r.status);
+      const ab = await r.arrayBuffer();
+      return { audio: new Float32Array(ab), sampling_rate: Number(r.headers.get('X-Sample-Rate')) || 22050 };
+    },
+  };
+
   function loadStt() {
     if (stt.promise) return stt.promise;
     stt.state = 'loading';
     stt.promise = (async () => {
+      if (await detectNative()) { timing.sttLoad = 0; stt.device = 'native'; return nativeStt; }
       const m = await import(TJS);
       const t0 = performance.now();
       let p = null;
@@ -68,6 +94,7 @@
     if (tts.promise) return tts.promise;
     tts.state = 'loading';
     tts.promise = (async () => {
+      if (await detectNative()) { tts.device = 'native'; timing.ttsLoad = 0; return nativeTts; }
       const m = await import(KOKORO);
       const t0 = performance.now();
       const gpu = await hasGpu();
@@ -90,7 +117,7 @@
       timing.ttsLoad = Math.round(performance.now() - t0);
       return e;
     })()
-      .then((e) => { tts.engine = e; tts.state = 'ready'; console.info('[renee] kokoro ready on', tts.device, timing.ttsLoad + 'ms'); return e; })
+      .then((e) => { tts.engine = e; tts.state = 'ready'; console.info('[renee] voice ready on', tts.device, timing.ttsLoad + 'ms'); return e; })
       .catch((e) => { tts.failed = true; tts.state = 'failed'; tts.promise = null; console.warn('kokoro failed', e && e.message); throw e; });
     return tts.promise;
   }
@@ -226,7 +253,7 @@
     const me = { abort() { finished = true; try { ac.abort(); } catch (e) {} if (sp) sp.cancel(); } };
     current = me;
     const show = () => {
-      const s = 'heard ' + (tm.stt / 1000).toFixed(1) + 's, first words ' + (tm.first != null ? (tm.first / 1000).toFixed(1) + 's' : '-') + ', first audio ' + (tm.audio != null ? (tm.audio / 1000).toFixed(1) + 's' : '-') + ', answer ' + (tm.total != null ? (tm.total / 1000).toFixed(1) + 's' : '-') + ' (' + (stt.device || '?') + ' / ' + (tts.engine ? 'kokoro' : 'browser voice') + ')';
+      const s = 'heard ' + (tm.stt / 1000).toFixed(1) + 's, first words ' + (tm.first != null ? (tm.first / 1000).toFixed(1) + 's' : '-') + ', first audio ' + (tm.audio != null ? (tm.audio / 1000).toFixed(1) + 's' : '-') + ', answer ' + (tm.total != null ? (tm.total / 1000).toFixed(1) + 's' : '-') + ' (' + (stt.device || '?') + ' / ' + (tts.engine ? (tts.device === 'native' ? 'piper' : 'kokoro') : 'browser voice') + ')';
       Object.assign(timing, tm, { line: s }); console.info('[renee timing]', s); cb.timing && cb.timing(s);
     };
     const fail = async (msg) => {
@@ -348,7 +375,7 @@
   }
 
   window.reneeVoice = {
-    stt, tts, timing, ask, nativeSpeak, voices: VOICES, voiceId, nextVoice,
+    stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     loadStt, loadTts, listen, stopListen, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
