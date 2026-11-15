@@ -9,6 +9,7 @@ import * as sync from './lib/sync.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { actionDone, actionDeclined } from './lib/actions.mjs';
 import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
 import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
@@ -65,6 +66,8 @@ async function api(req, res, url) {
   const p = url.pathname, q = url.searchParams, m = req.method;
   if (p === '/api/chat/status' && m === 'GET') return json(res, 200, await chatStatus());
   if (p === '/api/agent/upload' && m === 'POST') return json(res, 200, agentUpload(await readBody(req, 30_000_000)));
+  if (p === '/api/actions/done' && m === 'POST') return json(res, 200, actionDone(await readBody(req, 4000)));
+  if (p === '/api/actions/declined' && m === 'POST') return json(res, 200, actionDeclined(await readBody(req, 4000)));
   if (p === '/api/autosync' && m === 'GET') return json(res, 200, autosyncStatus());
   if (p === '/api/autosync' && m === 'POST') { const b = await readBody(req, 2000); return json(res, 200, autosyncSet(!!(b && b.on))); }
   if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());

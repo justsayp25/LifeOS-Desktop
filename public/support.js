@@ -53,8 +53,38 @@
       if (r.unavailable) return fall('Claude Code is not set up on this computer.');
       if (!r.ok) return done(r.error || "That didn't work. Try again.");
       if (r.session) sset(r.session);
-      done(plain(r.text));
+      done(plain(r.text), r.proposed || []);
     } catch (e) { done(e && e.status === 429 ? 'Still answering the last question. Give it a moment.' : "Couldn't reach the server. Is the LifeOS window still open?"); }
+  };
+  // R.E.N.E.E. only proposes (the server checked every field). Nothing is written until Jess says Yes; then these existing routes do it.
+  const ymd = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+  vault.confirmAction = async (p) => {
+    try {
+      const a = p.args || {};
+      if (p.type === 'add_task') await vault.post('/api/tasks', a);
+      else if (p.type === 'complete_task') await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(a.id), { done: true });
+      else if (p.type === 'tick_habit') await vault.post('/api/habits', a);
+      else if (p.type === 'add_event') await vault.post('/api/events', a);
+      else if (p.type === 'add_capture') {
+        const date = ymd(), cur = await vault.get('/api/daily?date=' + date), old = String(cur.captures || '').trim();
+        await vault.post('/api/daily', { date, field: 'captures', text: old ? old + '\n' + a.text : a.text, base: cur.captures || '' });
+      } else throw new Error('That change is not allowed.');
+      vault.post('/api/actions/done', { id: p.id, ok: true }).catch(() => {});
+      try { window.__dc && window.__dc._r(); } catch (e) {}
+      return { ok: true };
+    } catch (e) {
+      const msg = (e && e.message) || "That didn't work.";
+      vault.post('/api/actions/done', { id: p.id, ok: false, error: msg }).catch(() => {});
+      return { ok: false, message: msg };
+    }
+  };
+  vault.declineAction = (p) => { try { return vault.post('/api/actions/declined', { id: p.id }).catch(() => {}); } catch (e) { return null; } };
+  // Spoken answers: "yes" / "no" (and the usual ways of saying them) to a read-back question. null = neither.
+  vault.yesNo = (t) => {
+    const s = String(t || '').toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|do it|go ahead|please do|that's right|correct|affirmative)\b/.test(s)) return true;
+    if (/^(no|nope|nah|cancel|don't|do not|stop|never mind|nevermind|negative|wrong)\b/.test(s)) return false;
+    return null;
   };
   vault.newChat = () => sset('');
   // Sends a photo or file picked in the chat to the vault (Photos or PDFs). Resolves { file: { name, path, ... } }.

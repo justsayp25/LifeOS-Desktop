@@ -312,7 +312,7 @@
           const finalText = String(j.text || full || '').trim();
           if (finalText && finalText !== full.trim() && sp.count === 0) { full = finalText; sp.feed(finalText + ' '); }
           cb.text && cb.text(finalText || full);
-          cb.done && cb.done(finalText || full);
+          cb.done && cb.done(finalText || full, j.proposed || []);
           show(); sp.end();
         }
       };

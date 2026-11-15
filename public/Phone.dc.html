@@ -73,7 +73,21 @@
         </div>
       </sc-if>
       <sc-for list="{{msgs}}" as="m" hint-placeholder-count="2">
+        <sc-if value="{{m.isBubble}}" hint-placeholder-val="{{ true }}">
         <div style="align-self: {{m.align}}; max-width: 85%; padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.45; background: {{m.bg}}; color: {{m.fg}}; white-space: pre-wrap; overflow-wrap: anywhere;">{{m.text}}</div>
+        </sc-if>
+        <sc-if value="{{m.isCard}}" hint-placeholder-val="{{ false }}">
+          <div role="group" aria-label="Proposed change" style="align-self: flex-start; max-width: 85%; box-sizing: border-box; padding: 11px 13px; border-radius: 14px; background: #1A1A1A; border: 1px solid #333; display: flex; flex-direction: column; gap: 9px;">
+            <span style="font-size: 13.5px; line-height: 1.45; color: #E6E6E6; overflow-wrap: anywhere;">{{m.label}}</span>
+            <sc-if value="{{m.pending}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 8px;">
+                <button type="button" onClick="{{m.yes}}" style="min-height: 40px; min-width: 76px; padding: 0 18px; border-radius: 999px; border: 0; background: #F5F5F5; color: #121212; font-size: 14px; font-weight: 700; cursor: pointer;">Yes</button>
+                <button type="button" onClick="{{m.no}}" style="min-height: 40px; min-width: 76px; padding: 0 18px; border-radius: 999px; background: #222222; border: 1px solid #333; color: #D0D0D0; font-size: 14px; cursor: pointer;">No</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{m.hasResult}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; color: #8A8A8A;">{{m.result}}</span></sc-if>
+          </div>
+        </sc-if>
       </sc-for>
     </div>
     <sc-if value="{{voiceNote}}" hint-placeholder-val="{{ false }}">
@@ -559,12 +573,15 @@ class Component extends DCLogic {
     // agent
     const chatOpen = !!s.chatOpen;
     const listening = !!s.listening;
-    const msgs = (s.msgs || []).map((m) => ({
-      text: m.text,
-      align: m.role === 'user' ? 'flex-end' : 'flex-start',
-      bg: m.role === 'user' ? '#EDEDED' : '#222222',
-      fg: m.role === 'user' ? '#121212' : '#B5B5B5'
-    }));
+    const msgs = [];
+    (s.msgs || []).forEach((m, mi) => {
+      msgs.push({ isBubble: true, isCard: false, text: m.text, align: m.role === 'user' ? 'flex-end' : 'flex-start', bg: m.role === 'user' ? '#EDEDED' : '#222222', fg: m.role === 'user' ? '#121212' : '#B5B5B5' });
+      (m.proposed || []).forEach((p, pi) => msgs.push({
+        isBubble: false, isCard: true, label: p.label, pending: p.state === 'pending',
+        hasResult: p.state !== 'pending', result: p.state === 'working' ? 'Working…' : p.state === 'done' ? 'Done.' : p.state === 'declined' ? 'Not done.' : (p.note || "That didn't work."),
+        yes: () => cardYes(mi, pi), no: () => cardNo(mi, pi)
+      }));
+    });
     const prompts = ["What's due today?", 'Plan my day', 'Summarize this week'].map((text) => ({
       text, pick: () => this.setState({ draft: text })
     }));
@@ -582,10 +599,15 @@ class Component extends DCLogic {
       const prompt = "My LifeOS vault is attached. Before anything else, read AGENTS.md at its root and follow it. Then read whatever else you need from the vault. Never invent data. My request: " + text;
       const names = (opts.atts || []).map((a) => a.name);
       this.setState({ msgs: [...(st.msgs || []), { role: 'user', text: text + (names.length ? '\n[' + names.join(', ') + ']' : '') }, { role: 'agent', text: 'Reading your vault…', pending: true }], draft: '', atts: [], attachOpen: false, thinking: false });
-      const done = (reply) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); if (after) after(reply); };
+      const done = (reply, proposed) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply, proposed: (proposed || []).map((p) => ({ ...p, state: 'pending' })) }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); if (after) after(reply, proposed || []); };
       if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { files: (opts.atts || []).map((a) => a.path), model: opts.model || '' }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
       return true;
     };
+    // A change R.E.N.E.E. proposed: nothing is written until Yes. Then the existing routes do it (support.js, vault.confirmAction).
+    const setCard = (mi, pi, patch) => { const cur = ((this.state && this.state.msgs) || []).slice(); const m = cur[mi]; if (!m || !m.proposed) return; const pr = m.proposed.slice(); pr[pi] = { ...pr[pi], ...patch }; cur[mi] = { ...m, proposed: pr }; this.setState({ msgs: cur }); };
+    const cardAt = (mi, pi) => { const m = ((this.state && this.state.msgs) || [])[mi]; const p = m && m.proposed && m.proposed[pi]; return p && p.state === 'pending' ? p : null; };
+    const cardYes = async (mi, pi) => { const p = cardAt(mi, pi); if (!p) return; setCard(mi, pi, { state: 'working' }); const r = await window.vault.confirmAction(p); setCard(mi, pi, r.ok ? { state: 'done' } : { state: 'error', note: r.message }); };
+    const cardNo = (mi, pi) => { const p = cardAt(mi, pi); if (!p) return; window.vault.declineAction(p); setCard(mi, pi, { state: 'declined' }); };
     const sendMsg = () => { const st = this.state || {}; const text = (st.draft || '').trim(); if (!text && !(st.atts || []).length) return; runAsk(text || 'Look at the attached file(s).', { atts: st.atts || [], model: '' }); };
     const addFiles = async (e) => {
       const fs = Array.from((e && e.target && e.target.files) || []);
@@ -599,6 +621,7 @@ class Component extends DCLogic {
     };
     const RV = () => window.reneeVoice;
     const talkStop = () => {
+      this._pend = null; this._propose = null; // ending the conversation drops anything still waiting for a yes
       try { RV() && RV().stopListen(); RV() && RV().stopSpeak(); } catch (err) {}
       try { if (this._rec) { const r = this._rec; this._rec = null; r.onend = null; r.onerror = null; r.stop(); } } catch (err) {}
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (err) {}
@@ -615,23 +638,44 @@ class Component extends DCLogic {
       try { const u = new SpeechSynthesisUtterance(text); const cv = chosenVoice(); if (cv) u.voice = cv; u.rate = 1.03; u.onend = onend; u.onerror = onend; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); } catch (err) { console.warn('speech failed', err && err.message); onend(); }
     };
     const talkAskSlow = (text) => {
-      const ok = runAsk(text, { atts: [], model: 'haiku' }, (reply) => {
+      const ok = runAsk(text, { atts: [], model: 'haiku' }, (reply, proposed) => {
         if (!((this.state || {}).talk)) return;
+        this._propose = proposed && proposed.length ? proposed : null;
         this.setState({ talk: 'speaking', talkText: reply });
-        speak(reply, () => { if (((this.state || {}).talk) === 'speaking') talkListen(); });
+        speak(reply, () => { if (((this.state || {}).talk) === 'speaking') afterSpoken(); });
       });
       if (!ok) this.setState({ talk: '', voiceNote: 'Still answering the last question.' });
     };
     // Fast path: one warm Claude process, the answer streams back, and speech starts on the first sentence.
+    // After her answer: if she proposed a change, read it back and listen for Yes or No; otherwise just listen.
+    const talkSay = (line, then) => { if (!((this.state || {}).talk)) return; this.setState({ talk: 'speaking', talkText: line }); speak(line, () => { if (((this.state || {}).talk) === 'speaking') then(); }); };
+    const afterSpoken = () => {
+      const pr = this._propose; this._propose = null;
+      if (pr && pr.length) { this._pend = pr; talkSay(pr.map((p) => p.say || p.label).join('. ') + '. Say yes or no.', () => talkListen()); }
+      else talkListen();
+    };
+    const talkConfirm = async (pend) => {
+      let failed = '';
+      for (const p of pend) { const r = await window.vault.confirmAction(p); if (!r.ok && !failed) failed = r.message; }
+      if (!((this.state || {}).talk)) return;
+      talkSay(failed ? "That didn't work. " + failed : 'Done.', () => talkListen());
+    };
     const talkAsk = (text) => {
+      // a change is waiting for Yes or No: this answer is for that. Anything else drops it and is treated as a new question.
+      if (this._pend && this._pend.length) {
+        const pend = this._pend; this._pend = null; const yn = window.vault.yesNo(text);
+        if (yn === true) { this.setState({ talk: 'thinking', talkText: text }); talkConfirm(pend); return; }
+        pend.forEach((p) => window.vault.declineAction(p));
+        if (yn === false) { talkSay('Okay, nothing was changed.', () => talkListen()); return; }
+      }
       this.setState({ talk: 'thinking', talkText: text });
       const R = RV();
       if (!R || !R.ask) { talkAskSlow(text); return; }
       const live = () => !!((this.state || {}).talk);
       R.ask(text, {
         text: (t) => { if (live()) this.setState({ talk: 'speaking', talkText: t }); },
-        done: () => {}, // spoken conversation is not added to the chat list (it is still saved as a transcript in the vault)
-        spoken: () => { if (((this.state || {}).talk) === 'speaking') talkListen(); },
+        done: (t, proposed) => { this._propose = proposed && proposed.length ? proposed : null; }, // spoken conversation is not added to the chat list (it is still saved as a transcript in the vault)
+        spoken: () => { if (((this.state || {}).talk) === 'speaking') afterSpoken(); },
         timing: () => {}, // the timing line is in the console only ([renee timing])
         error: (msg) => { if (live()) this.setState({ talk: '', talkText: '', voiceNote: msg }); },
         fallback: () => { if (live()) talkAskSlow(text); },
