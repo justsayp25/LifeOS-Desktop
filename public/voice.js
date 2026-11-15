@@ -304,17 +304,28 @@
   function nextVoice() { const i = VOICES.indexOf(voiceId()); const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n; }
 
   // ---- listening ----
-  function stopListen() {
+  // One microphone stream stays open for the whole conversation. Opening and closing it every turn made Bluetooth headsets and
+  // Windows flip between "call mode" (low quality, quiet) and normal audio on every turn. It is released when the conversation ends
+  // (stopListen with no argument) or after 20 s with nobody listening.
+  let kept = null, keepTimer = null;
+  function micRelease() {
+    clearTimeout(keepTimer); keepTimer = null;
+    const k = kept; kept = null;
+    try { k && k.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  }
+  const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live');
+  function stopListen(keepOpen) {
     listenGen++;
     const m = mic; mic = null;
-    if (!m) return;
-    m.cancelled = true;
-    try { m.proc.disconnect(); m.src.disconnect(); } catch (e) {}
-    try { m.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    if (m) {
+      m.cancelled = true;
+      try { m.proc.disconnect(); m.src.disconnect(); } catch (e) {}
+    }
+    if (keepOpen === true) { clearTimeout(keepTimer); keepTimer = setTimeout(micRelease, 20000); } else micRelease();
   }
   // cb: { status(s), text(t), error(msg) }   s = loading | listening | hearing | thinking
   async function listen(cb) {
-    stopListen();
+    stopListen(true);
     const myGen = listenGen;
     if (!stt.pipe && !stt.failed) {
       const iv = setInterval(() => cb.status('loading', stt.progress), 400);
@@ -329,12 +340,19 @@
     if (stt.failed) { cb.error('stt-failed'); return false; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { cb.error('no-mic'); return false; }
     let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-    catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
-    if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
+    clearTimeout(keepTimer);
+    if (micLive()) stream = kept;
+    else {
+      // Echo cancellation and noise suppression are off on purpose: they switch the browser into "voice call" processing, which lowers
+      // and degrades her voice. She never listens while she is speaking, so there is no echo to cancel.
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }); }
+      catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
+      if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
+      kept = stream;
+    }
     const c = audioCtx(); try { await c.resume(); } catch (e) {}
     await new Promise((r) => setTimeout(r, 350)); // let the end of her own voice die away so it is not heard as speech
-    if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
+    if (myGen !== listenGen) return false;
     const src = c.createMediaStreamSource(stream);
     const proc = c.createScriptProcessor(4096, 1, 1);
     const m = { stream, src, proc, cancelled: false };
@@ -342,7 +360,7 @@
     const chunks = []; let heard = false, silentMs = 0, speechMs = 0, idleMs = 0, floor = 0.004, t = 0;
     const done = async (ok) => {
       if (m.cancelled) return;
-      stopListen();
+      stopListen(true); // keep the microphone stream open for the next turn
       if (!ok || !heard) { cb.text(''); return; }
       cb.status('thinking');
       const tt0 = performance.now();
