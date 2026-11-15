@@ -35,10 +35,15 @@
   function outAwake() {
     try {
       const c = playCtx(); c.resume();
-      if (!keepAlive) { const b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.00004; const n = c.createBufferSource(); n.buffer = b; n.loop = true; n.connect(c.destination); n.start(); keepAlive = n; }
+      if (!keepAlive) { const b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = 0.00004; const n = c.createBufferSource(); n.buffer = b; n.loop = true; n.connect(c.destination); n.start(); keepAlive = n; }
       clearTimeout(awakeTimer); awakeTimer = setTimeout(outSleep, 25000);
     } catch (e) {}
   }
+  let cctx = null;
+  const capCtx = () => {
+    if (!cctx) { const A = window.AudioContext || window.webkitAudioContext; try { cctx = new A({ sinkId: { type: 'none' } }); } catch (e) { cctx = new A(); } }
+    return cctx;
+  };
   const audioCtx = () => { if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; ctx = new A(); } return ctx; };
   const prog = (o) => (p) => { if (p && typeof p.progress === 'number') o.progress = Math.round(p.progress); };
 
@@ -341,13 +346,42 @@
   }
   // A Bluetooth headset's microphone forces the headset into low-quality "hands-free call" sound while it is open. If the chosen microphone is
   // a Bluetooth one and the computer has another (built-in or USB), listen with that one instead, so the headset keeps its high-quality sound.
+  const shortMic = (l) => String(l || '').replace(/^(default|communications)\s*-\s*/i, '').replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)/i, '').trim() || 'Default';
+  const savedMic = () => { try { return localStorage.getItem('lifeos.micId') || ''; } catch (e) { return ''; } };
+  async function openMic() {
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: true };
+    const id = savedMic();
+    if (id) { try { return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: id } } }); } catch (e) { if (e && e.name === 'NotAllowedError') throw e; /* that microphone is not plugged in: use the default */ } }
+    return await navigator.mediaDevices.getUserMedia({ audio: base });
+  }
+  // Name of the microphone in use (shown in the panel) and a way to switch to the next one.
+  function micLabel() {
+    const tr = kept && kept.getAudioTracks()[0];
+    if (tr && tr.label) return shortMic(tr.label);
+    let l = ''; try { l = localStorage.getItem('lifeos.micLabel') || ''; } catch (e) {}
+    return l ? shortMic(l) : 'Default';
+  }
+  async function cycleMic() {
+    let tmp = null;
+    try {
+      if (!kept) { tmp = await navigator.mediaDevices.getUserMedia({ audio: true }); } // permission, so the device names are visible
+      const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'communications');
+      if (!list.length) return micLabel();
+      let cur = savedMic(); if (!cur) { const tr = kept && kept.getAudioTracks()[0]; const s0 = tr && tr.getSettings && tr.getSettings(); cur = (s0 && s0.deviceId) || ''; }
+      const i = list.findIndex((d) => d.deviceId === cur), nx = list[(i + 1) % list.length];
+      try { localStorage.setItem('lifeos.micId', nx.deviceId); localStorage.setItem('lifeos.micLabel', nx.label || ''); } catch (e) {}
+      micRelease(); // the next turn opens the new microphone
+      return shortMic(nx.label);
+    } catch (e) { return micLabel(); } finally { try { tmp && tmp.getTracks().forEach((t) => t.stop()); } catch (e) {} }
+  }
   async function preferOtherMic(stream) {
     try {
       const BT = /bluetooth|hands-?free|airpods|buds/i;
       const cur = stream.getAudioTracks()[0];
-      if (!cur || !BT.test(cur.label || '')) return stream;
+      if (savedMic() || !cur || !BT.test(cur.label || '')) return stream; // a microphone you picked yourself is never replaced
       const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
-      const alt = devs.find((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label && !BT.test(d.label));
+      const ok = devs.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label && !BT.test(d.label));
+      const alt = ok.find((d) => /usb/i.test(d.label)) || ok[0];
       if (!alt) return stream;
       const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: alt.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
       try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
@@ -399,14 +433,15 @@
     else {
       // Echo cancellation and noise suppression are off on purpose: they switch the browser into "voice call" processing, which lowers
       // and degrades her voice. She never listens while she is speaking, so there is no echo to cancel.
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }); }
+      try { stream = await openMic(); }
       catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
       if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
       stream = await preferOtherMic(stream);
       if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
       kept = stream;
+      try { const tr0 = stream.getAudioTracks()[0]; console.info('[renee] microphone:', tr0 && tr0.label); if (tr0 && tr0.label) localStorage.setItem('lifeos.micLabel', tr0.label); } catch (e) {}
     }
-    const c = audioCtx(); try { await c.resume(); } catch (e) {}
+    const c = capCtx(); try { await c.resume(); } catch (e) {}
     if (myGen !== listenGen) return false;
     const src = c.createMediaStreamSource(stream);
     const m = { stream, src, node: null, zero: null, proc: null, cancelled: false };
@@ -478,6 +513,6 @@
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
-    loadStt, loadTts, listen, stopListen, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
+    loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
