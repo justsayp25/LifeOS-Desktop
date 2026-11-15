@@ -374,21 +374,36 @@
       return shortMic(nx.label);
     } catch (e) { return micLabel(); } finally { try { tmp && tmp.getTracks().forEach((t) => t.stop()); } catch (e) {} }
   }
-  async function preferOtherMic(stream) {
+  // Automatic microphone: nothing to set up. A dedicated or USB microphone beats the built-in one; a Bluetooth headset microphone (it forces
+  // the headset into low-quality call sound) and virtual devices (Stereo Mix, OBS, VB-Cable) come last. The system default only wins ties.
+  // A microphone you chose yourself (lifeos.micId) is never replaced.
+  const BT = /bluetooth|hands-?free|airpods|buds|a2dp/i;
+  const VIRTUAL = /stereo mix|virtual|loopback|cable|voicemeeter|vb-audio|nvidia broadcast|\bobs\b|steam streaming|what u hear/i;
+  const WEBCAM = /webcam|camera|\bc9\d\d\b|brio/i;
+  const EXTERNAL = /usb|blue\b|yeti|rode|shure|audio-technica|at2\d\d\d|hyperx|quadcast|fifine|samson|elgato|focusrite|scarlett|behringer|snowball|seiren|maono|tonor|podcast|condenser/i;
+  const BUILTIN = /array|internal|built-?in|realtek|laptop|smart sound|dmic/i;
+  const micScore = (label, isDefault) => (VIRTUAL.test(label) ? -20 : 0) + (BT.test(label) ? -6 : 0) + (WEBCAM.test(label) ? 4 : EXTERNAL.test(label) ? 10 : 0) + (BUILTIN.test(label) ? 1 : 0) + (isDefault ? 2 : 0);
+  async function autoPickMic(stream) {
     try {
-      const BT = /bluetooth|hands-?free|airpods|buds/i;
-      const cur = stream.getAudioTracks()[0];
-      if (savedMic() || !cur || !BT.test(cur.label || '')) return stream; // a microphone you picked yourself is never replaced
-      const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
-      const ok = devs.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label && !BT.test(d.label));
-      const alt = ok.find((d) => /usb/i.test(d.label)) || ok[0];
-      if (!alt) return stream;
-      const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: alt.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+      if (savedMic()) return stream;
+      const cur = stream.getAudioTracks()[0]; if (!cur) return stream;
+      const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+      const defDev = all.find((d) => d.deviceId === 'default'), defGroup = (defDev && defDev.groupId) || (cur.getSettings && cur.getSettings().groupId) || '';
+      const real = all.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label);
+      if (real.length < 2) return stream; // only one microphone: nothing to choose
+      const ranked = real.map((d) => ({ d, sc: micScore(d.label, d.groupId === defGroup) })).sort((x, y) => y.sc - x.sc);
+      const best = ranked[0].d, curGroup = (cur.getSettings && cur.getSettings().groupId) || defGroup;
+      console.info('[renee] microphones:', ranked.map((r) => r.d.label + ' (' + r.sc + ')').join(' | '));
+      if (best.groupId === curGroup) return stream;
+      const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: best.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
       try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
-      console.info('[renee] microphone:', alt.label, '(not the Bluetooth headset, so its sound stays high quality)');
+      console.info('[renee] microphone chosen automatically:', best.label);
       return s2;
     } catch (e) { return stream; }
   }
+  // Plugging in or removing a microphone: the next turn picks again.
+  let micStale = false;
+  try { navigator.mediaDevices.addEventListener('devicechange', () => { micStale = true; }); } catch (e) {}
   const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live' && !t.muted);
   function stopListen(keepOpen) {
     listenGen++;
@@ -429,6 +444,7 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { cb.error('no-mic'); return false; }
     let stream;
     clearTimeout(keepTimer);
+    if (micStale) { micStale = false; micRelease(); } // a device was plugged in or removed: choose again
     if (micLive()) stream = kept;
     else {
       // Echo cancellation and noise suppression are off on purpose: they switch the browser into "voice call" processing, which lowers
@@ -436,7 +452,7 @@
       try { stream = await openMic(); }
       catch (e) { cb.error(e && e.name === 'NotAllowedError' ? 'blocked' : 'no-mic'); return false; }
       if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
-      stream = await preferOtherMic(stream);
+      stream = await autoPickMic(stream);
       if (myGen !== listenGen) { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} return false; }
       kept = stream;
       try { const tr0 = stream.getAudioTracks()[0]; console.info('[renee] microphone:', tr0 && tr0.label); if (tr0 && tr0.label) localStorage.setItem('lifeos.micLabel', tr0.label); } catch (e) {}
