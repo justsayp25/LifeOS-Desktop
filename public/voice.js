@@ -355,17 +355,28 @@
       return s2;
     } catch (e) { return stream; }
   }
-  const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live');
+  const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live' && !t.muted);
   function stopListen(keepOpen) {
     listenGen++;
     const m = mic; mic = null;
     if (m) {
       m.cancelled = true;
-      try { m.proc.disconnect(); m.src.disconnect(); } catch (e) {}
+      try { m.src.disconnect(); } catch (e) {}
+      try { m.proc && m.proc.disconnect(); } catch (e) {}
+      try { if (m.node) { m.node.port.onmessage = null; m.node.disconnect(); } m.zero && m.zero.disconnect(); } catch (e) {}
     }
     if (keepOpen === true) { clearTimeout(keepTimer); keepTimer = setTimeout(micRelease, 20000); } else micRelease();
   }
   // cb: { status(s), text(t), error(msg) }   s = loading | listening | hearing | thinking
+  let wlCtx = null, wlP = null;
+  function workletReady(c) {
+    if (wlCtx !== c) { wlCtx = c; wlP = null; }
+    if (!wlP) {
+      const code = "class C extends AudioWorkletProcessor{process(i){const x=i[0]&&i[0][0];if(x)this.port.postMessage(x.slice(0));return true}}registerProcessor('renee-cap',C)";
+      wlP = c.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))).catch((e) => { wlP = null; throw e; });
+    }
+    return wlP;
+  }
   async function listen(cb) {
     stopListen(true);
     const myGen = listenGen;
@@ -396,13 +407,13 @@
       kept = stream;
     }
     const c = audioCtx(); try { await c.resume(); } catch (e) {}
-    await new Promise((r) => setTimeout(r, 350)); // let the end of her own voice die away so it is not heard as speech
     if (myGen !== listenGen) return false;
     const src = c.createMediaStreamSource(stream);
-    const proc = c.createScriptProcessor(4096, 1, 1);
-    const m = { stream, src, proc, cancelled: false };
+    const m = { stream, src, node: null, zero: null, proc: null, cancelled: false };
     mic = m;
-    const chunks = []; let heard = false, silentMs = 0, speechMs = 0, idleMs = 0, floor = 0.004, t = 0;
+    // The microphone is read on the audio thread (AudioWorklet), so a busy page cannot make it drop pieces of your voice. The old
+    // ScriptProcessor, which runs on the page's main thread, is only the fallback.
+    const chunks = []; let heard = false, silentMs = 0, speechMs = 0, idleMs = 0, floor = 0, calMs = 0, t = 0, deaf = 350;
     const done = async (ok) => {
       if (m.cancelled) return;
       stopListen(true); // keep the microphone stream open for the next turn
@@ -422,23 +433,44 @@
       } catch (e) { cb.error('stt-failed'); }
     };
     m.finish = () => done(true);
-    proc.onaudioprocess = (ev) => {
+    const onBlock = (d) => {
       if (m.cancelled) return;
-      const d = ev.inputBuffer.getChannelData(0), ms = d.length / c.sampleRate * 1000;
+      const ms = d.length / c.sampleRate * 1000;
       let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
       const rms = Math.sqrt(s / d.length);
-      if (!heard) floor = floor * 0.95 + rms * 0.05;
-      const on = rms > Math.max(0.012, floor * 3.5);
-      chunks.push(new Float32Array(d)); // keep the lead-in so the first word isn't clipped
-      if (!heard && chunks.length > 6) chunks.shift();
-      t += ms;
+      // Room-noise level: the quietest block in the first 300 ms (so it works even if you start talking at once), then it follows the
+      // room while nobody is talking. Speech must be clearly above it, whether you speak softly or loudly.
+      if (calMs < 300) { floor = floor ? Math.min(floor, rms) : rms; calMs += ms; }
+      else if (!heard) { if (rms < floor * 2.5) floor = floor * 0.9 + rms * 0.1; else floor *= 1.002; }
+      floor = Math.max(floor, 0.0008);
+      chunks.push(new Float32Array(d)); // pre-roll: the half second before you start is kept so the first word is not clipped
+      if (!heard) { const keep = Math.ceil(700 / ms); while (chunks.length > keep) chunks.shift(); }
+      t += ms; deaf -= ms; // the first 350 ms are not counted as speech, so the end of her own voice is not mistaken for you
+      const on = deaf <= 0 && rms > Math.max(0.006, floor * 3);
       if (on) { if (!heard) { heard = true; cb.status('hearing'); } speechMs += ms; silentMs = 0; }
       else if (heard) silentMs += ms; else idleMs += ms;
-      if (heard && silentMs > SILENCE_MS && speechMs > 400) done(true);
+      const endMs = speechMs < 1200 ? SILENCE_MS : SILENCE_MS + 200; // a longer pause is allowed after a longer sentence
+      if (heard && silentMs > endMs && speechMs > 400) done(true);
       else if (!heard && idleMs > 9000) done(false);
       else if (t > 40000) done(heard);
     };
-    src.connect(proc); proc.connect(c.destination);
+    let wired = false;
+    try {
+      await workletReady(c);
+      if (myGen !== listenGen) return false;
+      const node = new AudioWorkletNode(c, 'renee-cap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      let acc = new Float32Array(2048), n = 0;
+      node.port.onmessage = (ev) => { const f = ev.data; for (let i = 0; i < f.length; i++) { acc[n++] = f[i]; if (n === 2048) { const blk = acc; acc = new Float32Array(2048); n = 0; onBlock(blk); } } };
+      const zero = c.createGain(); zero.gain.value = 0;
+      src.connect(node); node.connect(zero); zero.connect(c.destination);
+      m.node = node; m.zero = zero; wired = true;
+    } catch (e) { console.warn('[renee] AudioWorklet not available, using the older microphone reader:', e && e.message); }
+    if (!wired) {
+      const proc = c.createScriptProcessor(4096, 1, 1);
+      proc.onaudioprocess = (ev) => onBlock(new Float32Array(ev.inputBuffer.getChannelData(0)));
+      src.connect(proc); proc.connect(c.destination);
+      m.proc = proc;
+    }
     cb.status('listening');
     return true;
   }
