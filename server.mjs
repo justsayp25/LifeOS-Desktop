@@ -9,7 +9,7 @@ import * as sync from './lib/sync.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, VAULT, PORT, HOST, HttpError, exists } from './lib/vault.mjs';
+import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
 import { listReviews, createReview, binReview } from './lib/reviews.mjs';
 import { listTasks, createTask, setTaskDone } from './lib/tasks.mjs';
@@ -134,7 +134,17 @@ function serveStatic(req, res, url) {
   send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream' });
 }
 
+// Optional idle stop (phone): IDLE_EXIT_MIN in .env. The server exits after that many minutes with no request at all.
+// The Android app sends /api/health every 30 s while it is open, so it counts as activity; 0 or unset = never stop.
+const IDLE_MIN = Number(env.IDLE_EXIT_MIN || 0);
+let lastHit = Date.now(), inFlight = 0;
+if (IDLE_MIN > 0) setInterval(() => {
+  if (inFlight === 0 && Date.now() - lastHit > IDLE_MIN * 60000) { console.log('Idle for ' + IDLE_MIN + ' min, stopping. Start it again any time.'); process.exit(0); }
+}, 30000).unref();
+
 const server = http.createServer(async (req, res) => {
+  lastHit = Date.now(); inFlight++;
+  res.on('close', () => { inFlight--; lastHit = Date.now(); });
   try {
     const url = new URL(req.url, 'http://x');
     // Other devices on the network may only talk to the sync. Everything else (the dashboard and its API) stays on this PC.
