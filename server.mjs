@@ -72,7 +72,7 @@ async function api(req, res, url) {
   if (p === '/api/autosync' && m === 'GET') return json(res, 200, autosyncStatus());
   if (p === '/api/autosync' && m === 'POST') { const b = await readBody(req, 2000); return json(res, 200, autosyncSet(!!(b && b.on))); }
   if (p === '/api/gymimport/status' && m === 'GET') return json(res, 200, gymImportStatus());
-  if (p === '/api/gymimport/run' && m === 'POST') return json(res, 200, gymImportRun());
+  if (p === '/api/gymimport/run' && m === 'POST') return json(res, 200, gymImportRun({ repair: q.get('repair') }));
   if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());
   if (p === '/api/gitsync/run' && m === 'POST') return json(res, 200, await gitSyncRun());
   if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
