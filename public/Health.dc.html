@@ -1702,7 +1702,7 @@ class Component extends DCLogic {
       date: longDate(selDay),
       heart,
       walk: walkN === null ? '—' : walkN.toLocaleString('en-US'), walkCol: walkN === null ? '#6B6B6B' : '#F5F5F5',
-      act: phDay && phDay.activeMin != null ? String(phDay.activeMin) : '—', actCol: phDay && phDay.activeMin != null ? '#F5F5F5' : '#6B6B6B', burn: phDay && phDay.burnedCal != null ? phDay.burnedCal.toLocaleString('en-US') : '—', burnCol: phDay && phDay.burnedCal != null ? '#F5F5F5' : '#6B6B6B',
+      act: phDay && phDay.activeMin != null ? String(phDay.activeMin) : '—', actCol: phDay && phDay.activeMin != null ? '#F5F5F5' : '#6B6B6B', burn: phDay && phDay.burnedCal != null ? (selDay === todayStr ? '≈ ' : '') + phDay.burnedCal.toLocaleString('en-US') : '—' /* today's calories are an estimate: Samsung writes a whole-day entry and Health Connect splits it by the time of day */, burnCol: phDay && phDay.burnedCal != null ? '#F5F5F5' : '#6B6B6B',
       prev: () => this.setState({ hDay: dayBefore(selDay, 1) }),
       next: () => { if (selDay < todayStr) this.setState({ hDay: dayBefore(selDay, -1) === todayStr ? '' : dayBefore(selDay, -1) }); },
       nextOp: selDay < todayStr ? '1' : '0.3',
