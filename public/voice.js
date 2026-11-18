@@ -247,6 +247,16 @@
     };
     const flush = (all) => {
       for (;;) {
+        // The first chunk is the one you wait for. If the first sentence is long, start with its first clause (up to a comma), so her voice starts
+        // sooner (a 140-character sentence took Kokoro about 4 s on the phone before the first sound).
+        // Later long sentences are cut at a comma too (above 90 characters), so each piece is ready before the one before it has finished playing.
+        if (!all) {
+          const sm = buf.match(/^([\s\S]*?[.!?:;])\s+/);
+          if ((sm ? sm[1].length : buf.length) > (count === 0 ? 70 : 90)) {
+            const cm = buf.slice(0, 120).match(/^([\s\S]{28,}?[,;])\s+/);
+            if (cm) { buf = buf.slice(cm[0].length); emit(cm[1]); continue; }
+          }
+        }
         const m = buf.match(/^([\s\S]*?[.!?:;])(\s+)/);
         if (!m) break;
         // keep very short fragments ("Yes.") together with the next sentence
@@ -630,6 +640,6 @@
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
-    makeVad, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
+    makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
