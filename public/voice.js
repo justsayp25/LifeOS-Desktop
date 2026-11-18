@@ -179,6 +179,7 @@
     try { if (player.src) { player.src.onended = null; player.src.stop(); } } catch (e) {}
     player.src = null;
     try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+    try { nttsStop(); } catch (e) {}
   }
   function playBuffer(raw, gen) {
     return new Promise((resolve) => {
@@ -211,8 +212,45 @@
       return r.find((v) => v.name === saved) || r[0] || null;
     } catch (e) { return null; }
   }
+  // The phone's own text-to-speech through the LifeOS app (LifeOS-Mobile >= 1.7.0): the engine set in Android's speech settings (Samsung), like OmaLauncher.
+  let ntts = null, nttsOk = null, nttsSeq = 0; const nttsWait = {};
+  const nttsPost = (o) => { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'tts' }, o))); } catch (e) {} };
+  function nttsReady() {
+    if (nttsOk !== null) return Promise.resolve(nttsOk);
+    if (ntts) return ntts;
+    ntts = new Promise((resolve) => {
+      if (!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android')) { nttsOk = false; return resolve(false); }
+      const t = setTimeout(() => { nttsOk = false; nativeReport('phone voice: the app did not answer (an older app build?), using the browser voice', ''); resolve(false); }, 3000);
+      window.reneeNativeTts = { onEvent(e) {
+        if (!e) return;
+        if (e.type === 'ready') { clearTimeout(t); if (nttsOk === null) { nttsOk = true; nativeReport('phone voice: the app speaks with Android\'s own text-to-speech', ''); resolve(true); } }
+        else if (e.type === 'unavailable') { clearTimeout(t); if (nttsOk === null) { nttsOk = false; nativeReport('phone voice: Android text-to-speech is not available, using the browser voice', ''); resolve(false); } }
+        else if (e.id && nttsWait[e.id]) nttsWait[e.id](e.type);
+      } };
+      nttsPost({ cmd: 'init' });
+    });
+    return ntts;
+  }
+  const nttsStop = () => { if (nttsOk) nttsPost({ cmd: 'stop' }); };
+  // true = spoken, false = did not start (the caller falls back), null = the app has no native voice
+  async function nttsSpeak(text, gen) {
+    if (!(await nttsReady())) return null;
+    if (gen != null && gen !== player.gen) return true;
+    return new Promise((resolve) => {
+      const id = 'u' + (++nttsSeq); let started = false, fin = false;
+      const done = (ok) => { if (fin) return; fin = true; clearTimeout(watch); clearTimeout(guard); delete nttsWait[id]; resolve(ok); };
+      const watch = setTimeout(() => { if (!started) { nttsPost({ cmd: 'stop' }); phoneBroken = true; nativeReport('phone voice failed (the app voice did not start), using Kokoro instead', ''); done(false); } }, 4000);
+      const guard = setTimeout(() => done(true), 6000 + text.length * 150);
+      nttsWait[id] = (type) => { if (type === 'start') started = true; else if (type === 'done') done(true); else if (type === 'error') { if (!started) { phoneBroken = true; nativeReport('phone voice failed (the app voice errored), using Kokoro instead', ''); done(false); } else done(true); } };
+      nttsPost({ cmd: 'speak', id, text, rate: ttsRate() });
+    });
+  }
   // Resolves true when it spoke (or the browser voice was used), false when the phone's own voice (Voice: Phone) did not start: the caller then uses Kokoro.
-  function nativeSpeak(text, gen) {
+  async function nativeSpeak(text, gen) {
+    if (phoneVoice()) { const r = await nttsSpeak(text, gen); if (r !== null) return r; }
+    return nativeSpeakWeb(text, gen);
+  }
+  function nativeSpeakWeb(text, gen) {
     return new Promise((resolve) => {
       if (gen != null && gen !== player.gen) return resolve(true);
       try {
@@ -674,7 +712,7 @@
   }
 
   window.reneeVoice = {
-    stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
+    stt, tts, timing, ask, nativeSpeak, nttsSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
