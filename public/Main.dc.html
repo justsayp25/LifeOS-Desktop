@@ -753,6 +753,7 @@ class Component extends DCLogic {
         status: (st, p) => {
           if (!((this.state || {}).talk)) return;
           if (st === 'loading') this.setState({ voiceNote: (p && p < 100 ? 'Downloading voice, first time only (' + p + '%)...' : 'Setting up voice on your graphics card, up to a minute, first time only...') });
+          else if (st === 'starting') this.setState({ voiceNote: 'Getting ready, one second...' });
           else if (st === 'listening') this.setState({ voiceNote: '', talkText: '' });
           else if (st === 'hearing') this.setState({ talkText: '' });
           else if (st === 'thinking') this.setState({ talkText: '' });
