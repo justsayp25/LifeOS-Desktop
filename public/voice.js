@@ -498,10 +498,14 @@
     outAwake();
     return new Promise((resolve) => {
       let finished = false, text = '', tEnd = 0, retried = false, quiet = null;
+      const tr0 = performance.now(), trace = []; let nPartial = 0;
+      const mark = (n) => { if (trace.length < 14) trace.push(n + ' ' + ((performance.now() - tr0) / 1000).toFixed(1) + 's'); };
       // The phone's recognizer decides you are done by its own timer (several seconds). Instead: when your words have not changed for a moment, tell it to finish now.
-      const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) nativePost({ cmd: 'stop' }); }, NATIVE_END_MS); };
+      const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) { mark('stop sent'); nativePost({ cmd: 'stop' }); } }, NATIVE_END_MS); };
       const fin = (t, err) => {
         if (finished) return; finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null;
+        mark(err ? 'error ' + err : 'done ' + String(t || '').trim().split(/\s+/).filter(Boolean).length + ' words');
+        nativeReport('android turn: ' + trace.join(', ') + (nPartial ? ' (' + nPartial + ' partial updates)' : ''));
         if (err) { cb.error(err); return; }
         if (tEnd) timing.stt = Math.round(performance.now() - tEnd); // from the end of your words to the text
         stt.device = 'android';
@@ -511,12 +515,13 @@
       nativeActive = true;
       window.reneeNative = { onEvent(e) {
         if (finished || myGen !== listenGen || !e) return;
-        if (e.type === 'ready') cb.status('listening');
-        else if (e.type === 'speech') cb.status('hearing');
-        else if (e.type === 'end') tEnd = performance.now();
-        else if (e.type === 'partial') { if (e.text) { text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
-        else if (e.type === 'final') fin(e.text || text);
+        if (e.type === 'ready') { mark('ready'); cb.status('listening'); }
+        else if (e.type === 'speech') { mark('speech'); cb.status('hearing'); }
+        else if (e.type === 'end') { mark('end'); tEnd = performance.now(); }
+        else if (e.type === 'partial') { if (e.text) { if (!nPartial) mark('first words'); nPartial++; text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
+        else if (e.type === 'final') { mark('final'); fin(e.text || text); }
         else if (e.type === 'error') {
+          mark('code ' + e.code);
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
           if (e.code === 6 || e.code === 7) fin(text);
           else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300); }
@@ -529,7 +534,7 @@
           else {
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
             nativeBroken = true;
-            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper');
+            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper | what happened: ' + trace.join(', '));
             finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
             listen(cb);
           }
