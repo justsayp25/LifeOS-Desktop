@@ -405,7 +405,7 @@
   let phoneBroken = false; // the phone's own voice did not work once: Kokoro for the rest of this page's life
   const inApp = () => !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android'); // the app can speak by itself, no browser speech needed
   function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && (!!window.speechSynthesis || inApp()); } catch (e) { return false; } }
-  function voiceId() { if (phoneVoice()) return 'phone ' + ttsRate() + 'x'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
+  function voiceId() { if (phoneVoice()) return 'phone ' + ttsRate() + 'x'; return VOICES[0]; } // Heart only
   function nextVoice() {
     // Phone stops: 1.25x, 1.5x, 1x, 0.8x, then back to the first Kokoro voice (the speed is kept in lifeos.ttsRate)
     if (phoneVoice()) {
