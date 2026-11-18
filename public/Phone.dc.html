@@ -599,7 +599,8 @@ class Component extends DCLogic {
       const names = (opts.atts || []).map((a) => a.name);
       this.setState({ msgs: [...(st.msgs || []), { role: 'user', text: text + (names.length ? '\n[' + names.join(', ') + ']' : '') }, { role: 'agent', text: 'Reading your vault…', pending: true }], draft: '', atts: [], attachOpen: false, thinking: false });
       const done = (reply, proposed) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply, proposed: (proposed || []).map((p) => ({ ...p, state: 'pending' })) }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); if (after) after(reply, proposed || []); };
-      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { files: (opts.atts || []).map((a) => a.path), model: opts.model || '' }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
+      const live = (t, status) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); if (k < 0) return; const nt = t || (status ? status + '\u2026' : ''); if (!nt || cur[k].text === nt) return; cur[k] = { ...cur[k], text: nt }; this.setState({ msgs: cur }); };
+      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { onText: live, files: (opts.atts || []).map((a) => a.path), model: opts.model || '' }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
       return true;
     };
     // A change R.E.N.E.E. proposed: nothing is written until Yes. Then the existing routes do it (support.js, vault.confirmAction).

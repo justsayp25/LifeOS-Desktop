@@ -57,9 +57,42 @@
       try { vault.openChat(fallbackPrompt); } catch (e) {}
       done(why + ' I opened the Claude app instead, with your question filled in. Approve the folder prompt there, then send.');
     };
+    // The answer streams in as it is written ({d}), with what she is doing ({status}); an older server without the stream route answers in one piece.
+    const streamChat = async (body, onText) => {
+      const r = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok || !r.body || !r.body.getReader) return null;
+      const rd = r.body.getReader(), dec = new TextDecoder();
+      let buf = '', text = '', status = '', final = null, last = 0, waiting = false, over = false;
+      const push = (force) => {
+        if (!onText || over) return;
+        const now = Date.now();
+        if (!force && now - last < 70) { if (!waiting) { waiting = true; setTimeout(() => { waiting = false; push(true); }, 70); } return; }
+        last = now; try { onText(plain(text), status); } catch (e) {}
+      };
+      try {
+        for (;;) {
+          const { value, done: end } = await rd.read(); if (end) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue;
+            let j; try { j = JSON.parse(line); } catch (e) { continue; }
+            if (j.d) { text += j.d; push(false); }
+            else if (j.reset) { text = ''; push(true); }
+            else if (j.status) { status = j.status; if (!text) push(true); }
+            else if (j.done) final = j;
+            else if (j.error) { const err = new Error(j.error); err.status = j.code; throw err; }
+          }
+        }
+      } finally { over = true; }
+      if (!final) throw new Error('The answer was cut off. Try again.');
+      return final;
+    };
+    const chat1 = async (body) => { const s = await streamChat(body, o.onText); return s === null ? vault.post('/api/chat', body) : s; };
     try {
-      let r = await vault.post('/api/chat', { text, session: sget(), files: o.files || [], model: o.model || '' });
-      if (!r.ok && !r.unavailable && sget()) { sset(''); r = await vault.post('/api/chat', { text, session: '', files: o.files || [], model: o.model || '' }); }
+      const body = { text, session: sget(), files: o.files || [], model: o.model || '' };
+      let r = await chat1(body);
+      if (!r.ok && !r.unavailable && sget()) { sset(''); r = await chat1({ ...body, session: '' }); }
       if (r.unavailable) return fall('Claude Code is not set up on this computer.');
       if (!r.ok) return done(r.error || "That didn't work. Try again.");
       if (r.session) sset(r.session);

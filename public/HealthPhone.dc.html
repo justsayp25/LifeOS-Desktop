@@ -1801,7 +1801,8 @@ class Component extends DCLogic {
       const prompt = "My LifeOS vault is attached. Before anything else, read AGENTS.md at its root and follow it. Then read whatever else you need from the vault. Never invent data. My request: " + text;
       this.setState({ msgs: [...(st.msgs || []), { role: 'user', text }, { role: 'agent', text: 'Reading your vault\u2026', pending: true }], draft: '', thinking: false });
       const done = (reply) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); };
-      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
+      const live = (t, status) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); if (k < 0) return; const nt = t || (status ? status + '\u2026' : ''); if (!nt || cur[k].text === nt) return; cur[k] = { ...cur[k], text: nt }; this.setState({ msgs: cur }); };
+      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { onText: live }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
     };
     const startVoice = () => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
