@@ -344,7 +344,7 @@
     })();
     return me;
   }
-  function voiceId() { let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
+  function voiceId() { return VOICES[0]; } // Heart only (a saved lifeos.kvoice is ignored)
   function nextVoice() { const i = VOICES.indexOf(voiceId()); const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n; }
 
   // ---- listening ----
