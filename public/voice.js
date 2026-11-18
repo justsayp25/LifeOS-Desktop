@@ -285,7 +285,7 @@
       count++;
       let au = null;
       const useK = useKNow();
-      if (useK) { au = synth.then(() => (gen === player.gen ? tts.engine.generate(sent, { voice, speed: 1.0 }) : null)); synth = au.catch(() => {}); }
+      if (useK) { au = synth.then(() => (gen === player.gen ? tts.engine.generate(sent, { voice, speed: ttsRate() }) : null)); synth = au.catch(() => {}); }
       play = play.then(async () => {
         if (gen !== player.gen) return;
         try {
@@ -293,7 +293,7 @@
           else {
             mark && mark();
             const spoke = (phoneBroken && tts.engine && !tts.failed) ? false : await nativeSpeak(sent, gen);
-            if (spoke === false && tts.engine && !tts.failed && gen === player.gen) { const raw3 = await tts.engine.generate(sent, { voice: voiceId(), speed: 1.0 }); if (gen === player.gen && raw3 && valid(raw3)) await playBuffer(raw3, gen); }
+            if (spoke === false && tts.engine && !tts.failed && gen === player.gen) { const raw3 = await tts.engine.generate(sent, { voice: voiceId(), speed: ttsRate() }); if (gen === player.gen && raw3 && valid(raw3)) await playBuffer(raw3, gen); }
           }
         } catch (e) { console.warn('speak failed, using browser voice', e && e.message); if (gen === player.gen) await nativeSpeak(sent, gen); }
       });
@@ -400,7 +400,7 @@
   }
   // The phone's own voice (Android's speech engine through the browser): starts speaking at once and sounds like the phone's assistant; chosen as the
   // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
-  const ttsRate = () => { let r = 1.25; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
+  const ttsRate = () => { let r = phoneVoice() ? 1.25 : 1.0; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
   let phoneBroken = false; // the phone's own voice did not work once: Kokoro for the rest of this page's life
   function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
   function voiceId() { if (phoneVoice()) return 'phone ' + ttsRate() + 'x'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
