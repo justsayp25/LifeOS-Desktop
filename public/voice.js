@@ -712,7 +712,7 @@
   }
 
   window.reneeVoice = {
-    stt, tts, timing, ask, nativeSpeak, nttsSpeak, get rate() { return ttsRate(); }, setRate(x) { x = Math.max(0.6, Math.min(2, Math.round(Number(x) * 20) / 20)); try { localStorage.setItem('lifeos.ttsRate', String(x)); } catch (e) {} return x; }, get phoneOn() { return phoneVoice(); }, get voices() { return VOICES; }, voiceId, nextVoice,
+    stt, tts, timing, ask, nativeSpeak, nttsSpeak, get rate() { return ttsRate(); }, setRate(x) { x = Math.max(0.6, Math.min(2, Math.round(Number(x) * 20) / 20)); try { localStorage.setItem('lifeos.ttsRate', String(x)); } catch (e) {} return x; }, get phoneOn() { return phoneVoice(); }, togglePhone() { try { if (phoneBroken) phoneBroken = false; if (localStorage.getItem('lifeos.tts') === 'phone') { localStorage.removeItem('lifeos.tts'); } else { localStorage.setItem('lifeos.tts', 'phone'); } } catch (e) {} return phoneVoice(); }, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
