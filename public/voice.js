@@ -287,6 +287,8 @@
     const show = () => {
       const s = 'heard ' + (tm.stt / 1000).toFixed(1) + 's, first words ' + (tm.first != null ? (tm.first / 1000).toFixed(1) + 's' : '-') + ', first audio ' + (tm.audio != null ? (tm.audio / 1000).toFixed(1) + 's' : '-') + ', answer ' + (tm.total != null ? (tm.total / 1000).toFixed(1) + 's' : '-') + ' (' + (stt.device || '?') + ' / ' + (tts.engine ? (tts.device === 'native' ? 'piper' : 'kokoro') : 'browser voice') + ')';
       Object.assign(timing, tm, { line: s }); console.info('[renee timing]', s); cb.timing && cb.timing(s);
+      // the finished turn is also written to the server log (grep "voice timing" ~/lifeos-server.log) so it can be read without a browser console
+      if (tm.total != null && !tm.sent) { tm.sent = true; try { fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: s, stt: stt.device || '', tts: tts.device || '', endMs: SILENCE_MS }) }).catch(() => {}); } catch (e) {} }
     };
     const fail = async (msg) => {
       if (finished) return; finished = true; if (current === me) current = null;
