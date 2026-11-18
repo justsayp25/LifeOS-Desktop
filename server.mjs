@@ -78,7 +78,7 @@ async function api(req, res, url) {
   if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
   if (p === '/api/voice/stt' && m === 'POST') return json(res, 200, await nativeStt(await readRaw(req, 4_000_000)));
   if (p === '/api/voice/tts' && m === 'POST') { const r = await nativeTts(await readBody(req, 20_000)); return send(res, 200, r.buf, { 'Content-Type': 'application/octet-stream', 'X-Sample-Rate': String(r.sampleRate) }); }
-  if (p === '/api/voice/timing' && m === 'POST') { const b = (await readBody(req, 2000)) || {}; const c = (v) => String(v == null ? '' : v).replace(/[^\w .,:;()+\-]/g, '').slice(0, 120); console.log('[voice timing] ' + c(b.line) + ' | listening: ' + c(b.stt) + ', speaking: ' + c(b.tts) + ', waits ' + c(b.endMs) + ' ms of quiet to end your turn'); return json(res, 200, { ok: true }); }
+  if (p === '/api/voice/timing' && m === 'POST') { const b = (await readBody(req, 2000)) || {}; const c = (v) => String(v == null ? '' : v).replace(/[^\w .,:;()+\-]/g, '').slice(0, 260); console.log('[voice timing] ' + c(b.line) + ' | listening: ' + c(b.stt) + ', speaking: ' + c(b.tts) + ', waits ' + c(b.endMs) + ' ms of quiet to end your turn'); return json(res, 200, { ok: true }); }
   if (p === '/api/voice/warm' && m === 'POST') return json(res, 200, await voiceWarm());
   if (p === '/api/voice/reset' && m === 'POST') return json(res, 200, voiceReset());
   if (p === '/api/voice/ask' && m === 'POST') return voiceAsk(await readBody(req, 20_000), req, res);

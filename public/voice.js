@@ -503,10 +503,12 @@
     if (myGen !== listenGen) return null;
     return new Promise((resolve) => {
       let finished = false, text = '', tEnd = 0, retried = false, quiet = null, heard = false, t0 = performance.now(), quickRetried = false;
+      const trace = [], mark = (n) => { if (trace.length < 16) trace.push(n + ' ' + ((performance.now() - t0) / 1000).toFixed(1) + 's'); }; let nPartial = 0; mark('opened');
       // The phone's recognizer decides you are done by its own timer (several seconds). Instead: when your words have not changed for a moment, tell it to finish now.
-      const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) nativePost({ cmd: 'stop' }); }, NATIVE_END_MS); };
+      const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) { mark('stop sent'); nativePost({ cmd: 'stop' }); } }, NATIVE_END_MS); };
       const fin = (t, err) => {
         if (finished) return; finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null;
+        mark(err ? 'error ' + err : 'done ' + String(t || '').trim().split(/\s+/).filter(Boolean).length + ' words'); nativeReport('android turn: ' + trace.join(', ') + (nPartial ? ' (' + nPartial + ' partial updates)' : ''));
         if (err) { cb.error(err); return; }
         if (tEnd) timing.stt = Math.round(performance.now() - tEnd); // from the end of your words to the text
         stt.device = 'android';
@@ -516,15 +518,16 @@
       nativeActive = true;
       window.reneeNative = { onEvent(e) {
         if (finished || myGen !== listenGen || !e) return;
-        if (e.type === 'ready') { nativeWarm = true; cb.status('listening'); }
-        else if (e.type === 'speech') { heard = true; cb.status('hearing'); }
-        else if (e.type === 'end') tEnd = performance.now();
-        else if (e.type === 'partial') { if (e.text) { text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
-        else if (e.type === 'final') fin(e.text || text);
+        if (e.type === 'ready') { mark('ready'); nativeWarm = true; cb.status('listening'); }
+        else if (e.type === 'speech') { mark('speech'); heard = true; cb.status('hearing'); }
+        else if (e.type === 'end') { mark('end'); tEnd = performance.now(); }
+        else if (e.type === 'partial') { if (e.text) { if (!nPartial) mark('first words'); nPartial++; text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
+        else if (e.type === 'final') { mark('final'); fin(e.text || text); }
         else if (e.type === 'error') {
+          mark('code ' + e.code);
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
           // a quick drop-out with nothing heard (the recognizer was not ready yet) is a start-up glitch: start it again once, silently
-          if ((e.code === 6 || e.code === 7 || e.code === 5) && !heard && !text && !quickRetried && performance.now() - t0 < 3000) { quickRetried = true; nativeReport('android listening: it dropped out at the start (code ' + e.code + '), starting it again'); nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 250); }
+          if ((e.code === 6 || e.code === 7 || e.code === 5) && !heard && !text && !quickRetried && performance.now() - t0 < 3000) { quickRetried = true; nativeReport('android listening: it dropped out at the start (code ' + e.code + '), starting it again | ' + trace.join(', ')); nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 250); }
           else if (e.code === 6 || e.code === 7) fin(text);
           else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300); }
           else if ((e.code === 12 || e.code === 13) && !nativeOnline) {
