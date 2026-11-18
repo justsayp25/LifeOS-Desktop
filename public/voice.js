@@ -550,7 +550,9 @@
   const startNative = () => nativePost({ cmd: 'start', lang: '', silenceMs: 900, offline: !nativeOnline }); // lang '' = the phone's own language
   const NATIVE_END_MS = 900; // quiet after your last word before the phone's listening is told to finish
   let nativeBroken = false; // the phone's recognizer failed once: use Whisper for the rest of this page's life
-  const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
+  // Android listening is the default inside the app: remember it so the app's menu shows it too (a choice of Whisper in the menu is kept)
+  try { if (window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === null) localStorage.setItem('lifeos.sttEngine', 'android'); } catch (e) {}
+  const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') !== 'whisper'); } catch (e) { return false; } };
   const NERR = { 1: 'network timeout', 2: 'network', 3: 'audio', 4: 'server', 5: 'client', 8: 'recognizer busy', 9: 'no permission', 11: 'server disconnected', 12: 'language not supported', 13: 'language unavailable', '-1': 'could not start' };
   // written to the server log too (grep "voice timing" ~/lifeos-server.log), so a failure on the phone can be read without a browser console
   const nativeReport = (msg, stt) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: stt === undefined ? 'android' : stt, tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
