@@ -229,7 +229,7 @@
   function speaker(onend, mark) {
     stopAudio();
     const gen = player.gen;
-    const useK = !!tts.engine && !tts.failed;
+    const useK = !!tts.engine && !tts.failed && !phoneVoice();
     const voice = voiceId();
     let buf = '', synth = Promise.resolve(), play = Promise.resolve(), count = 0, ended = false, fin = false;
     const emit = (raw) => {
@@ -276,6 +276,7 @@
   }
   // Returns true when Kokoro is handling it; false means "use the browser voice".
   function speak(text, onend) {
+    if (phoneVoice()) return false; // the phone's own voice (the page speaks with the browser voice)
     if (!tts.engine || tts.failed) { loadTts().catch(() => {}); return false; }
     const sp = speaker(onend);
     sp.feed(text + ' '); sp.end();
@@ -344,8 +345,16 @@
     })();
     return me;
   }
-  function voiceId() { return VOICES[0]; } // Heart only (a saved lifeos.kvoice is ignored)
-  function nextVoice() { const i = VOICES.indexOf(voiceId()); const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n; }
+  // The phone's own voice (Android's speech engine through the browser): starts speaking at once and sounds like the phone's assistant; chosen as the
+  // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
+  function phoneVoice() { try { localStorage.removeItem('lifeos.tts'); } catch (e) {} return false; } // the Phone voice is removed: Kokoro Heart only
+  function voiceId() { return VOICES[0]; } // Heart only
+  function nextVoice() {
+    if (phoneVoice()) { try { localStorage.removeItem('lifeos.tts'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0]; }
+    const i = VOICES.indexOf(voiceId());
+    if (i === VOICES.length - 1 && window.speechSynthesis) { try { localStorage.setItem('lifeos.tts', 'phone'); } catch (e) {} return 'phone'; }
+    const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n;
+  }
 
   // ---- listening ----
   // One microphone stream stays open for the whole conversation. Opening and closing it every turn made Bluetooth headsets and
@@ -474,7 +483,6 @@
   // Inside the LifeOS Android app, and only when "Listening: Android" is chosen in its menu, the phone's recognizer listens and its text comes
   // back through the app (no recording to transcribe afterwards, so it is quick). If the app has no such support (an older build), or it fails
   // to start, the normal listening below (Whisper) is used.
-  let nativeWarm = false; // the phone's recognizer has been ready once in this page
   let nativeOnline = false; // the offline language pack is missing on this phone: let its normal recognizer use the network
   const startNative = () => nativePost({ cmd: 'start', lang: '', silenceMs: 900, offline: !nativeOnline }); // lang '' = the phone's own language
   const NATIVE_END_MS = 900; // quiet after your last word before the phone's listening is told to finish
@@ -485,13 +493,12 @@
   const nativeReport = (msg) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: 'android', tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
   function nativePost(o) { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'stt' }, o))); } catch (e) {} }
   let nativeOk = null, nativeNoted = false;
-  let nativeProbeP = null; // one probe at a time: the warm-up at preload and the first turn share it
-  const nativeProbe = () => nativeProbeP || (nativeProbeP = new Promise((resolve) => {
+  const nativeProbe = () => new Promise((resolve) => {
     if (nativeOk !== null) return resolve(nativeOk);
     const t = setTimeout(() => { window.reneeNative = null; nativeOk = false; nativeReport('android listening not used: the app did not answer (an older app build?), using Whisper'); resolve(false); }, 1500);
     window.reneeNative = { onEvent(e) { if (e && e.type === 'probe') { clearTimeout(t); window.reneeNative = null; nativeOk = !!e.ok; if (!nativeOk) nativeReport('android listening not used: this phone has no speech recognizer available to the app, using Whisper'); resolve(nativeOk); } } };
     nativePost({ cmd: 'probe' });
-  }));
+  });
   async function listenNative(cb) {
     stopListen(true);
     const myGen = listenGen;
@@ -499,16 +506,16 @@
     if (!nativeNoted) { nativeNoted = true; nativeReport('android listening is on (the phone recognizes your speech)'); }
     micRelease(); // the phone's recognizer needs the microphone for itself
     outAwake();
-    if (!nativeWarm) await new Promise((r) => setTimeout(r, 300)); // first turn: let the microphone be freed before the recognizer asks for it
-    if (myGen !== listenGen) return null;
     return new Promise((resolve) => {
-      let finished = false, text = '', tEnd = 0, retried = false, quiet = null, heard = false, t0 = performance.now(), quickRetried = false;
-      const trace = [], mark = (n) => { if (trace.length < 16) trace.push(n + ' ' + ((performance.now() - t0) / 1000).toFixed(1) + 's'); }; let nPartial = 0; mark('opened');
+      let finished = false, text = '', tEnd = 0, retried = false, quiet = null;
+      const tr0 = performance.now(), trace = []; let nPartial = 0;
+      const mark = (n) => { if (trace.length < 14) trace.push(n + ' ' + ((performance.now() - tr0) / 1000).toFixed(1) + 's'); };
       // The phone's recognizer decides you are done by its own timer (several seconds). Instead: when your words have not changed for a moment, tell it to finish now.
       const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) { mark('stop sent'); nativePost({ cmd: 'stop' }); } }, NATIVE_END_MS); };
       const fin = (t, err) => {
         if (finished) return; finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null;
-        mark(err ? 'error ' + err : 'done ' + String(t || '').trim().split(/\s+/).filter(Boolean).length + ' words'); nativeReport('android turn: ' + trace.join(', ') + (nPartial ? ' (' + nPartial + ' partial updates)' : ''));
+        mark(err ? 'error ' + err : 'done ' + String(t || '').trim().split(/\s+/).filter(Boolean).length + ' words');
+        nativeReport('android turn: ' + trace.join(', ') + (nPartial ? ' (' + nPartial + ' partial updates)' : ''));
         if (err) { cb.error(err); return; }
         if (tEnd) timing.stt = Math.round(performance.now() - tEnd); // from the end of your words to the text
         stt.device = 'android';
@@ -518,17 +525,15 @@
       nativeActive = true;
       window.reneeNative = { onEvent(e) {
         if (finished || myGen !== listenGen || !e) return;
-        if (e.type === 'ready') { mark('ready'); nativeWarm = true; cb.status('listening'); }
-        else if (e.type === 'speech') { mark('speech'); heard = true; cb.status('hearing'); }
+        if (e.type === 'ready') { mark('ready'); cb.status('listening'); }
+        else if (e.type === 'speech') { mark('speech'); cb.status('hearing'); }
         else if (e.type === 'end') { mark('end'); tEnd = performance.now(); }
         else if (e.type === 'partial') { if (e.text) { if (!nPartial) mark('first words'); nPartial++; text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
         else if (e.type === 'final') { mark('final'); fin(e.text || text); }
         else if (e.type === 'error') {
           mark('code ' + e.code);
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
-          // a quick drop-out with nothing heard (the recognizer was not ready yet) is a start-up glitch: start it again once, silently
-          if ((e.code === 6 || e.code === 7 || e.code === 5) && !heard && !text && !quickRetried && performance.now() - t0 < 3000) { quickRetried = true; nativeReport('android listening: it dropped out at the start (code ' + e.code + '), starting it again | ' + trace.join(', ')); nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 250); }
-          else if (e.code === 6 || e.code === 7) fin(text);
+          if (e.code === 6 || e.code === 7) fin(text);
           else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300); }
           else if ((e.code === 12 || e.code === 13) && !nativeOnline) {
             // the on-device language is not downloaded: use the phone's normal recognizer once (it may use the network) instead of giving up
@@ -539,14 +544,14 @@
           else {
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
             nativeBroken = true;
-            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper');
+            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper | what happened: ' + trace.join(', '));
             finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
             listen(cb);
           }
         }
       } };
       startNative();
-      cb.status(nativeWarm ? 'listening' : 'starting'); // the first time, say "getting ready" until the phone's recognizer is ready, so you do not speak too early
+      cb.status('listening');
       resolve(true);
     });
   }
@@ -646,17 +651,9 @@
     return true;
   }
 
-  // Inside the app, get ready as soon as the page opens, so nothing heavy starts when the first conversation does (the models loading at that moment
-  // stalled the page and the first sentence was lost). Whisper is only loaded when the phone's own listening is not used.
-  try {
-    if (window.ReactNativeWebView && window.__LIFEOS_APP === 'android') {
-      setTimeout(() => { try { if (nativeWanted()) nativeProbe().catch(() => {}); else loadStt().catch(() => {}); } catch (e) {} }, 1500);
-      setTimeout(() => { try { loadTts().catch(() => {}); } catch (e) {} }, 3000);
-    }
-  } catch (e) {}
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
-    preload() { if (!nativeWanted()) loadStt().catch(() => {}); loadTts().catch(() => {}); if (nativeWanted()) nativeProbe().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
+    preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
