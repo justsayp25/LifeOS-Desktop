@@ -211,18 +211,25 @@
       return r.find((v) => v.name === saved) || r[0] || null;
     } catch (e) { return null; }
   }
+  // Resolves true when it spoke (or the browser voice was used), false when the phone's own voice (Voice: Phone) did not start: the caller then uses Kokoro.
   function nativeSpeak(text, gen) {
     return new Promise((resolve) => {
-      if (gen != null && gen !== player.gen) return resolve();
+      if (gen != null && gen !== player.gen) return resolve(true);
       try {
         // The phone's own voice (chosen as "Voice: Phone") is spoken like OmaLauncher does: the system's default voice (the one set in Android's text-to-speech
         // settings, here the Samsung engine) at 1.25x. The browser-voice fallback keeps its own ranked voice and speed.
         const u = new SpeechSynthesisUtterance(text); const ph = phoneVoice(); const v = ph ? null : nativeVoice(); if (v) u.voice = v; u.rate = ph ? ttsRate() : 1.05;
-        let done = false; const fin = () => { if (!done) { done = true; clearTimeout(guard); resolve(); } };
+        let done = false, started = false;
+        const fin = (ok) => { if (!done) { done = true; clearTimeout(guard); clearTimeout(watch); resolve(ok !== false); } };
         const guard = setTimeout(fin, 4000 + text.length * 120); // some engines never fire onend
-        u.onend = fin; u.onerror = fin;
+        // the phone's voice must start within 2.5 s; if it errors or stays silent, stop using it and report why
+        const failPhone = (why) => { if (done) return; phoneBroken = true; nativeReport('phone voice failed (' + why + '), using Kokoro instead', ''); try { window.speechSynthesis.cancel(); } catch (e) {} fin(false); };
+        const watch = ph ? setTimeout(() => { if (!started) failPhone('it did not start'); }, 2500) : 0;
+        u.onstart = () => { started = true; clearTimeout(watch); };
+        u.onend = () => fin(true);
+        u.onerror = (e) => { if (ph && !started) failPhone('error ' + ((e && e.error) || '')); else fin(true); };
         window.speechSynthesis.speak(u);
-      } catch (e) { resolve(); }
+      } catch (e) { if (phoneVoice()) { phoneBroken = true; nativeReport('phone voice failed (' + ((e && e.message) || e) + '), using Kokoro instead', ''); resolve(false); } else resolve(true); }
     });
   }
   // Incremental speaker: feed(text) as it streams in, end() when the answer is complete.
@@ -231,19 +238,24 @@
   function speaker(onend, mark) {
     stopAudio();
     const gen = player.gen;
-    const useK = !!tts.engine && !tts.failed && !phoneVoice();
+    const useKNow = () => !!tts.engine && !tts.failed && !phoneVoice();
     const voice = voiceId();
     let buf = '', synth = Promise.resolve(), play = Promise.resolve(), count = 0, ended = false, fin = false;
     const emit = (raw) => {
       const sent = clean(raw); if (!sent) return;
       count++;
       let au = null;
+      const useK = useKNow();
       if (useK) { au = synth.then(() => (gen === player.gen ? tts.engine.generate(sent, { voice, speed: 1.0 }) : null)); synth = au.catch(() => {}); }
       play = play.then(async () => {
         if (gen !== player.gen) return;
         try {
           if (useK) { const raw2 = await au; if (gen !== player.gen || !raw2) return; if (!valid(raw2)) { tts.failed = true; throw new Error('kokoro returned silence'); } mark && mark(); await playBuffer(raw2, gen); }
-          else { mark && mark(); await nativeSpeak(sent, gen); }
+          else {
+            mark && mark();
+            const spoke = (phoneBroken && tts.engine && !tts.failed) ? false : await nativeSpeak(sent, gen);
+            if (spoke === false && tts.engine && !tts.failed && gen === player.gen) { const raw3 = await tts.engine.generate(sent, { voice: voiceId(), speed: 1.0 }); if (gen === player.gen && raw3 && valid(raw3)) await playBuffer(raw3, gen); }
+          }
         } catch (e) { console.warn('speak failed, using browser voice', e && e.message); if (gen === player.gen) await nativeSpeak(sent, gen); }
       });
     };
@@ -350,7 +362,8 @@
   // The phone's own voice (Android's speech engine through the browser): starts speaking at once and sounds like the phone's assistant; chosen as the
   // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
   const ttsRate = () => { let r = 1.25; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
-  function phoneVoice() { try { return localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
+  let phoneBroken = false; // the phone's own voice did not work once: Kokoro for the rest of this page's life
+  function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
   function voiceId() { if (phoneVoice()) return 'phone'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
   function nextVoice() {
     if (phoneVoice()) { try { localStorage.removeItem('lifeos.tts'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0]; }
@@ -493,7 +506,7 @@
   const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
   const NERR = { 1: 'network timeout', 2: 'network', 3: 'audio', 4: 'server', 5: 'client', 8: 'recognizer busy', 9: 'no permission', 11: 'server disconnected', 12: 'language not supported', 13: 'language unavailable', '-1': 'could not start' };
   // written to the server log too (grep "voice timing" ~/lifeos-server.log), so a failure on the phone can be read without a browser console
-  const nativeReport = (msg) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: 'android', tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
+  const nativeReport = (msg, stt) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: stt === undefined ? 'android' : stt, tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
   function nativePost(o) { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'stt' }, o))); } catch (e) {} }
   let nativeOk = null, nativeNoted = false;
   const nativeProbe = () => new Promise((resolve) => {
