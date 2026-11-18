@@ -293,7 +293,8 @@
           else {
             mark && mark();
             const spoke = (phoneBroken && tts.engine && !tts.failed) ? false : await nativeSpeak(sent, gen);
-            if (spoke === false && tts.engine && !tts.failed && gen === player.gen) { const raw3 = await tts.engine.generate(sent, { voice: voiceId(), speed: ttsRate() }); if (gen === player.gen && raw3 && valid(raw3)) await playBuffer(raw3, gen); }
+            if (spoke === false && !(tts.engine && !tts.failed) && gen === player.gen) await nativeSpeakWeb(sent, gen); // no Kokoro loaded: the browser's voice as a last resort
+            else if (spoke === false && tts.engine && !tts.failed && gen === player.gen) { const raw3 = await tts.engine.generate(sent, { voice: voiceId(), speed: ttsRate() }); if (gen === player.gen && raw3 && valid(raw3)) await playBuffer(raw3, gen); }
           }
         } catch (e) { console.warn('speak failed, using browser voice', e && e.message); if (gen === player.gen) await nativeSpeak(sent, gen); }
       });
@@ -330,7 +331,7 @@
   // Returns true when Kokoro is handling it; false means "use the browser voice".
   function speak(text, onend) {
     if (phoneVoice()) return false; // the phone's own voice (the page speaks with the browser voice)
-    if (!tts.engine || tts.failed) { loadTts().catch(() => {}); return false; }
+    if (!tts.engine || tts.failed) { if (!phoneVoice()) loadTts().catch(() => {}); return false; }
     const sp = speaker(onend);
     sp.feed(text + ' '); sp.end();
     return true;
@@ -713,8 +714,9 @@
   }
 
   window.reneeVoice = {
-    stt, tts, timing, ask, nativeSpeak, nttsSpeak, get rate() { return ttsRate(); }, setRate(x) { x = Math.max(0.6, Math.min(2, Math.round(Number(x) * 20) / 20)); try { localStorage.setItem('lifeos.ttsRate', String(x)); } catch (e) {} return x; }, get phoneOn() { return phoneVoice(); }, togglePhone() { try { if (phoneBroken) phoneBroken = false; if (localStorage.getItem('lifeos.tts') === 'phone') { localStorage.removeItem('lifeos.tts'); } else { localStorage.setItem('lifeos.tts', 'phone'); } } catch (e) {} return phoneVoice(); }, get voices() { return VOICES; }, voiceId, nextVoice,
-    preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
+    stt, tts, timing, ask, nativeSpeak, nttsSpeak, get rate() { return ttsRate(); }, setRate(x) { x = Math.max(0.6, Math.min(2, Math.round(Number(x) * 20) / 20)); try { localStorage.setItem('lifeos.ttsRate', String(x)); } catch (e) {} return x; }, get phoneOn() { if (!phoneVoice()) loadTts().catch(() => {}); return phoneVoice(); }, togglePhone() { try { if (phoneBroken) phoneBroken = false; if (localStorage.getItem('lifeos.tts') === 'phone') { localStorage.removeItem('lifeos.tts'); } else { localStorage.setItem('lifeos.tts', 'phone'); } } catch (e) {} return phoneVoice(); }, get voices() { return VOICES; }, voiceId, nextVoice,
+    preload() { loadStt().catch(() => {}); if (!phoneVoice()) loadTts().catch(() => {}); // Phone voice on: the Kokoro model is not loaded at all
+      try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
