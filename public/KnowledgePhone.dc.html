@@ -696,10 +696,10 @@ class Component extends DCLogic {
     });
     const chipSecs = [{ name: 'All', ...chipSty(!secSel), pick: pickAll }].concat(SECTIONS.map((sc) => ({ name: sc.name, ...chipSty(secSel === sc.name), pick: () => this.setState({ libSec: sc.name, libTopic: '', libNote: '', libChoose: false, libTopicMenu: false, libSecMenu: false, libView: 'list' }) })));
     const chipTopics = secSel && topicsOf(secSel).length > 1 ? topicsOf(secSel).map((t) => ({ name: t, ...chipSty(s.libTopic === t), pick: () => this.setState({ libTopic: s.libTopic === t ? '' : t, libNote: '', libTopicMenu: false }) })) : [];
-    const matches = (n) => qn ? (n.title + ' ' + n.body + ' ' + (n.tags || '') + ' ' + n.section + ' ' + n.topic).toLowerCase().indexOf(qn) >= 0 : ((!secSel || n.section === secSel) && (!topicSel || n.topic === topicSel));
+    const matches = (n) => qn ? (n.title + ' ' + n.body + ' ' + (n.tags || '') + ' ' + n.section + ' ' + n.topic + ' ' + (n.year || '')).toLowerCase().indexOf(qn) >= 0 : ((!secSel || n.section === secSel) && (!topicSel || n.topic === topicSel));
     const rows = libNotes.filter((n) => !isBlank(n) && matches(n)).slice().reverse().map((n) => {
       const k = (n.files || []).length;
-      const where = n.section === n.topic ? n.section : n.section + ' · ' + n.topic;
+      const where = (n.section === n.topic ? n.section : n.section + ' · ' + n.topic) + (n.year ? ' · ' + n.year : '');
       return {
         title: n.title.trim() || 'Untitled', snippet: n.body.replace(/\s+/g, ' ').slice(0, 140), hasSnippet: !!n.body.trim() && n.section !== 'Journal',
         meta: where.toUpperCase() + ' · ' + md(n.date) + (k ? ' · ' + k + (k === 1 ? ' FILE' : ' FILES') : ''), open: () => { this.setState({ libNote: n.id }); setEd(htmlOf(n)); }
@@ -754,7 +754,7 @@ class Component extends DCLogic {
       back: () => { this.setState({ libView: 'menu', libQ: '', libNote: '', libChoose: false }); try { window.scrollTo(0, 0); } catch (e) {} },
       closeNote: () => { this.setState({ libNote: '' }); try { window.scrollTo(0, 0); } catch (e) {} },
       note: inReader ? {
-        topic: (cur.section === cur.topic ? cur.section : cur.section + ' · ' + cur.topic).toUpperCase(), title: cur.title, body: cur.body, tags: cur.tags || '', date: md(cur.date),
+        topic: ((cur.section === cur.topic ? cur.section : cur.section + ' · ' + cur.topic) + (cur.year ? ' · ' + cur.year : '')).toUpperCase(), title: cur.title, body: cur.body, tags: cur.tags || '', date: md(cur.date),
         onTitle: patch('title'), tagList: tagsOf(cur).map((x) => ({ name: x, remove: rmTag(x) })), tagDraft,
         onDraft: (e) => { const v = e.target.value; if (v.indexOf(',') >= 0) commitTag(v); else this.setState({ tagDraft: v }); },
         onTagKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); commitTag(); } },
