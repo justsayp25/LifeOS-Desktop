@@ -26,6 +26,7 @@
   let player = { gen: 0, src: null };
   let mic = null;
   let listenGen = 0;
+  let nativeActive = false; // Android's own recognizer (LifeOS app) is listening
 
   // Playback has its own audio context (steady, larger buffers) and is kept awake with an inaudible signal while a conversation is
   // running: otherwise the sound card or Bluetooth link goes to sleep between sentences and wakes up with a cut-off, quiet start.
@@ -412,6 +413,7 @@
   const micLive = () => !!kept && kept.getTracks().some((t) => t.readyState === 'live' && !t.muted);
   function stopListen(keepOpen) {
     listenGen++;
+    if (nativeActive) { nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' }); }
     const m = mic; mic = null;
     if (m) {
       m.cancelled = true;
@@ -458,7 +460,58 @@
     };
   }
 
+  // ---- Android's own speech recognition ----
+  // Inside the LifeOS Android app, and only when "Listening: Android" is chosen in its menu, the phone's recognizer listens and its text comes
+  // back through the app (no recording to transcribe afterwards, so it is quick). If the app has no such support (an older build), or it fails
+  // to start, the normal listening below (Whisper) is used.
+  const nativeWanted = () => { try { return !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
+  function nativePost(o) { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'stt' }, o))); } catch (e) {} }
+  let nativeOk = null;
+  const nativeProbe = () => new Promise((resolve) => {
+    if (nativeOk !== null) return resolve(nativeOk);
+    const t = setTimeout(() => { window.reneeNative = null; nativeOk = false; resolve(false); }, 1500);
+    window.reneeNative = { onEvent(e) { if (e && e.type === 'probe') { clearTimeout(t); window.reneeNative = null; nativeOk = !!e.ok; resolve(nativeOk); } } };
+    nativePost({ cmd: 'probe' });
+  });
+  async function listenNative(cb) {
+    stopListen(true);
+    const myGen = listenGen;
+    if (!(await nativeProbe()) || myGen !== listenGen) return null; // not there: the normal listening takes over
+    micRelease(); // the phone's recognizer needs the microphone for itself
+    outAwake();
+    return new Promise((resolve) => {
+      let finished = false, text = '', tEnd = 0, retried = false;
+      const fin = (t, err) => {
+        if (finished) return; finished = true; clearTimeout(idle); nativeActive = false; window.reneeNative = null;
+        if (err) { cb.error(err); return; }
+        if (tEnd) timing.stt = Math.round(performance.now() - tEnd); // from the end of your words to the text
+        stt.device = 'android';
+        cb.text(String(t || '').trim());
+      };
+      const idle = setTimeout(() => { nativePost({ cmd: 'cancel' }); fin(text); }, 14000);
+      nativeActive = true;
+      window.reneeNative = { onEvent(e) {
+        if (finished || myGen !== listenGen || !e) return;
+        if (e.type === 'ready') cb.status('listening');
+        else if (e.type === 'speech') cb.status('hearing');
+        else if (e.type === 'end') tEnd = performance.now();
+        else if (e.type === 'partial') { if (e.text) text = e.text; }
+        else if (e.type === 'final') fin(e.text || text);
+        else if (e.type === 'error') {
+          // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
+          if (e.code === 6 || e.code === 7) fin(text);
+          else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 }); }, 300); }
+          else fin('', 'stt-failed');
+        }
+      } };
+      nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 });
+      cb.status('listening');
+      resolve(true);
+    });
+  }
+
   async function listen(cb) {
+    if (nativeWanted()) { const r = await listenNative(cb); if (r !== null) return r; }
     stopListen(true);
     const myGen = listenGen;
     outAwake(); // keep the speakers/headset awake for the whole conversation
@@ -555,6 +608,6 @@
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
-    makeVad, loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
+    makeVad, loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
