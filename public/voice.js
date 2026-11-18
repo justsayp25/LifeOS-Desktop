@@ -402,7 +402,8 @@
   // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
   const ttsRate = () => { let r = phoneVoice() ? 1.25 : 1.0; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
   let phoneBroken = false; // the phone's own voice did not work once: Kokoro for the rest of this page's life
-  function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
+  const inApp = () => !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android'); // the app can speak by itself, no browser speech needed
+  function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && (!!window.speechSynthesis || inApp()); } catch (e) { return false; } }
   function voiceId() { if (phoneVoice()) return 'phone ' + ttsRate() + 'x'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
   function nextVoice() {
     // Phone stops: 1.25x, 1.5x, 1x, 0.8x, then back to the first Kokoro voice (the speed is kept in lifeos.ttsRate)
@@ -412,7 +413,7 @@
       try { localStorage.removeItem('lifeos.tts'); localStorage.removeItem('lifeos.ttsRate'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0];
     }
     const i = VOICES.indexOf(voiceId());
-    if (i === VOICES.length - 1 && window.speechSynthesis) { try { localStorage.setItem('lifeos.tts', 'phone'); localStorage.setItem('lifeos.ttsRate', '1.25'); } catch (e) {} return 'phone 1.25x'; }
+    if (i === VOICES.length - 1 && (window.speechSynthesis || inApp())) { try { localStorage.setItem('lifeos.tts', 'phone'); localStorage.setItem('lifeos.ttsRate', '1.25'); } catch (e) {} return 'phone 1.25x'; }
     const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n;
   }
 
