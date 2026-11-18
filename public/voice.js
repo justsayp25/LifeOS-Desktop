@@ -228,6 +228,7 @@
         u.onstart = () => { started = true; clearTimeout(watch); };
         u.onend = () => fin(true);
         u.onerror = (e) => { if (ph && !started) failPhone('error ' + ((e && e.error) || '')); else fin(true); };
+        if (ph && !window.__voiceListed) { window.__voiceListed = true; try { const vs = window.speechSynthesis.getVoices() || []; nativeReport('phone voices: ' + vs.length + ' | default: ' + ((vs.find((x) => x.default) || {}).name || '?') + ' | ' + vs.slice(0, 6).map((x) => x.name + '/' + x.lang + (x.localService ? '' : '/net')).join(', '), ''); } catch (e) {} }
         window.speechSynthesis.speak(u);
       } catch (e) { if (phoneVoice()) { phoneBroken = true; nativeReport('phone voice failed (' + ((e && e.message) || e) + '), using Kokoro instead', ''); resolve(false); } else resolve(true); }
     });
@@ -364,11 +365,16 @@
   const ttsRate = () => { let r = 1.25; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
   let phoneBroken = false; // the phone's own voice did not work once: Kokoro for the rest of this page's life
   function phoneVoice() { try { return !phoneBroken && localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
-  function voiceId() { if (phoneVoice()) return 'phone'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
+  function voiceId() { if (phoneVoice()) return 'phone ' + ttsRate() + 'x'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
   function nextVoice() {
-    if (phoneVoice()) { try { localStorage.removeItem('lifeos.tts'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0]; }
+    // Phone stops: 1.25x, 1.5x, 1x, 0.8x, then back to the first Kokoro voice (the speed is kept in lifeos.ttsRate)
+    if (phoneVoice()) {
+      const steps = [1.25, 1.5, 1, 0.8], i = steps.indexOf(ttsRate());
+      if (i >= 0 && i < steps.length - 1) { try { localStorage.setItem('lifeos.ttsRate', String(steps[i + 1])); } catch (e) {} return 'phone ' + steps[i + 1] + 'x'; }
+      try { localStorage.removeItem('lifeos.tts'); localStorage.removeItem('lifeos.ttsRate'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0];
+    }
     const i = VOICES.indexOf(voiceId());
-    if (i === VOICES.length - 1 && window.speechSynthesis) { try { localStorage.setItem('lifeos.tts', 'phone'); } catch (e) {} return 'phone'; }
+    if (i === VOICES.length - 1 && window.speechSynthesis) { try { localStorage.setItem('lifeos.tts', 'phone'); localStorage.setItem('lifeos.ttsRate', '1.25'); } catch (e) {} return 'phone 1.25x'; }
     const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n;
   }
 
