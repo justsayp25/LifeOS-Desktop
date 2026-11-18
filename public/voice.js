@@ -215,7 +215,9 @@
     return new Promise((resolve) => {
       if (gen != null && gen !== player.gen) return resolve();
       try {
-        const u = new SpeechSynthesisUtterance(text); const v = nativeVoice(); if (v) u.voice = v; u.rate = 1.05;
+        // The phone's own voice (chosen as "Voice: Phone") is spoken like OmaLauncher does: the system's default voice (the one set in Android's text-to-speech
+        // settings, here the Samsung engine) at 1.25x. The browser-voice fallback keeps its own ranked voice and speed.
+        const u = new SpeechSynthesisUtterance(text); const ph = phoneVoice(); const v = ph ? null : nativeVoice(); if (v) u.voice = v; u.rate = ph ? ttsRate() : 1.05;
         let done = false; const fin = () => { if (!done) { done = true; clearTimeout(guard); resolve(); } };
         const guard = setTimeout(fin, 4000 + text.length * 120); // some engines never fire onend
         u.onend = fin; u.onerror = fin;
@@ -347,6 +349,7 @@
   }
   // The phone's own voice (Android's speech engine through the browser): starts speaking at once and sounds like the phone's assistant; chosen as the
   // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
+  const ttsRate = () => { let r = 1.25; try { const x = parseFloat(localStorage.getItem('lifeos.ttsRate')); if (x >= 0.5 && x <= 2) r = x; } catch (e) {} return r; };
   function phoneVoice() { try { return localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
   function voiceId() { if (phoneVoice()) return 'phone'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
   function nextVoice() {
