@@ -646,9 +646,17 @@
     return true;
   }
 
+  // Inside the app, get ready as soon as the page opens, so nothing heavy starts when the first conversation does (the models loading at that moment
+  // stalled the page and the first sentence was lost). Whisper is only loaded when the phone's own listening is not used.
+  try {
+    if (window.ReactNativeWebView && window.__LIFEOS_APP === 'android') {
+      setTimeout(() => { try { if (nativeWanted()) nativeProbe().catch(() => {}); else loadStt().catch(() => {}); } catch (e) {} }, 1500);
+      setTimeout(() => { try { loadTts().catch(() => {}); } catch (e) {} }, 3000);
+    }
+  } catch (e) {}
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
-    preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); if (nativeWanted()) nativeProbe().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
+    preload() { if (!nativeWanted()) loadStt().catch(() => {}); loadTts().catch(() => {}); if (nativeWanted()) nativeProbe().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
