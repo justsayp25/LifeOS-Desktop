@@ -348,8 +348,11 @@
   // a Bluetooth one and the computer has another (built-in or USB), listen with that one instead, so the headset keeps its high-quality sound.
   const shortMic = (l) => String(l || '').replace(/^(default|communications)\s*-\s*/i, '').replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)/i, '').trim() || 'Default';
   const savedMic = () => { try { return localStorage.getItem('lifeos.micId') || ''; } catch (e) { return ''; } };
+  // Android's automatic gain control slowly raises the background after you stop talking, so the quiet that ends your turn never came and you
+  // had to tap. It stays on elsewhere (it helps a quiet voice on a laptop); on Android the level is evened out before listening instead.
+  const AGC = !/Android/i.test((typeof navigator !== 'undefined' && navigator.userAgent) || '');
   async function openMic() {
-    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: true };
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: AGC };
     const id = savedMic();
     if (id) { try { return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: id } } }); } catch (e) { if (e && e.name === 'NotAllowedError') throw e; /* that microphone is not plugged in: use the default */ } }
     return await navigator.mediaDevices.getUserMedia({ audio: base });
@@ -395,7 +398,7 @@
       const best = ranked[0].d, curGroup = (cur.getSettings && cur.getSettings().groupId) || defGroup;
       console.info('[renee] microphones:', ranked.map((r) => r.d.label + ' (' + r.sc + ')').join(' | '));
       if (best.groupId === curGroup) return stream;
-      const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: best.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+      const s2 = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: best.deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: AGC } });
       try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
       console.info('[renee] microphone chosen automatically:', best.label);
       return s2;
@@ -426,6 +429,33 @@
     }
     return wlP;
   }
+  // Decides when you started and when you finished talking, from the loudness of each block (rms) and its length (ms). Speech must be clearly
+  // above the room noise measured before you started; once you have started, quiet means clearly below YOUR OWN voice level (a share of
+  // its recent peak), so a background that got louder meanwhile does not keep the turn open. Returns '' | 'start' | 'end' | 'idle' | 'cap'.
+  function makeVad() {
+    let heard = false, silentMs = 0, speechMs = 0, idleMs = 0, floor = 0, calMs = 0, t = 0, deaf = 350, peak = 0;
+    return {
+      get heard() { return heard; },
+      step(rms, ms) {
+        if (calMs < 300) { floor = floor ? Math.min(floor, rms) : rms; calMs += ms; }
+        else if (!heard) { if (rms < floor * 2.5) floor = floor * 0.9 + rms * 0.1; else floor *= 1.002; }
+        floor = Math.max(floor, 0.0008);
+        t += ms; deaf -= ms; // the first 350 ms are not counted as speech, so the end of her own voice is not mistaken for you
+        let thr = Math.max(0.006, floor * 3);
+        if (heard) thr = Math.max(thr, peak * 0.3);
+        const on = deaf <= 0 && rms > thr;
+        let ev = '';
+        if (on) { if (!heard) { heard = true; ev = 'start'; } speechMs += ms; silentMs = 0; peak = Math.max(peak * 0.99, rms); }
+        else if (heard) { silentMs += ms; peak *= 0.999; } else idleMs += ms;
+        const endMs = speechMs < 1200 ? SILENCE_MS : SILENCE_MS + 200; // a longer pause is allowed after a longer sentence
+        if (heard && silentMs > endMs && speechMs > 400) return 'end';
+        if (!heard && idleMs > 9000) return 'idle';
+        if (t > 40000) return 'cap';
+        return ev;
+      },
+    };
+  }
+
   async function listen(cb) {
     stopListen(true);
     const myGen = listenGen;
@@ -464,17 +494,19 @@
     mic = m;
     // The microphone is read on the audio thread (AudioWorklet), so a busy page cannot make it drop pieces of your voice. The old
     // ScriptProcessor, which runs on the page's main thread, is only the fallback.
-    const chunks = []; let heard = false, silentMs = 0, speechMs = 0, idleMs = 0, floor = 0, calMs = 0, t = 0, deaf = 350;
+    const chunks = []; const vad = makeVad();
     const done = async (ok) => {
       if (m.cancelled) return;
       stopListen(true); // keep the microphone stream open for the next turn
-      if (!ok || !heard) { cb.text(''); return; }
+      if (!ok || !vad.heard) { cb.text(''); return; }
       cb.status('thinking');
       const tt0 = performance.now();
       try {
         const pipe = stt.pipe || await loadStt();
         const total = chunks.reduce((n, a) => n + a.length, 0), all = new Float32Array(total);
         let o = 0; for (const a of chunks) { all.set(a, o); o += a.length; }
+        let pk = 0; for (let i = 0; i < all.length; i++) { const a = Math.abs(all[i]); if (a > pk) pk = a; }
+        if (pk > 0.002 && pk < 0.4) { const g = Math.min(30, 0.8 / pk); for (let i = 0; i < all.length; i++) all[i] *= g; }
         const r = await pipe(downsample(all, c.sampleRate, 16000), { chunk_length_s: 30, return_timestamps: false });
         timing.stt = Math.round(performance.now() - tt0);
         // Whisper invents words on room noise ("Thank you.", "you", "Bye."). Treat those as nothing heard.
@@ -489,21 +521,13 @@
       const ms = d.length / c.sampleRate * 1000;
       let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
       const rms = Math.sqrt(s / d.length);
-      // Room-noise level: the quietest block in the first 300 ms (so it works even if you start talking at once), then it follows the
-      // room while nobody is talking. Speech must be clearly above it, whether you speak softly or loudly.
-      if (calMs < 300) { floor = floor ? Math.min(floor, rms) : rms; calMs += ms; }
-      else if (!heard) { if (rms < floor * 2.5) floor = floor * 0.9 + rms * 0.1; else floor *= 1.002; }
-      floor = Math.max(floor, 0.0008);
+      const ev = vad.step(rms, ms);
       chunks.push(new Float32Array(d)); // pre-roll: the half second before you start is kept so the first word is not clipped
-      if (!heard) { const keep = Math.ceil(700 / ms); while (chunks.length > keep) chunks.shift(); }
-      t += ms; deaf -= ms; // the first 350 ms are not counted as speech, so the end of her own voice is not mistaken for you
-      const on = deaf <= 0 && rms > Math.max(0.006, floor * 3);
-      if (on) { if (!heard) { heard = true; cb.status('hearing'); } speechMs += ms; silentMs = 0; }
-      else if (heard) silentMs += ms; else idleMs += ms;
-      const endMs = speechMs < 1200 ? SILENCE_MS : SILENCE_MS + 200; // a longer pause is allowed after a longer sentence
-      if (heard && silentMs > endMs && speechMs > 400) done(true);
-      else if (!heard && idleMs > 9000) done(false);
-      else if (t > 40000) done(heard);
+      if (!vad.heard) { const keep = Math.ceil(700 / ms); while (chunks.length > keep) chunks.shift(); }
+      if (ev === 'start') cb.status('hearing');
+      else if (ev === 'end') done(true);
+      else if (ev === 'idle') done(false);
+      else if (ev === 'cap') done(vad.heard);
     };
     let wired = false;
     try {
@@ -529,6 +553,6 @@
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
-    loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
+    makeVad, loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();
