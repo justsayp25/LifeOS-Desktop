@@ -1,5 +1,5 @@
 // LifeOS web app server. Serves the dashboard and a small API over the vault. No dependencies.
-import { chatStatus, chatAsk } from './lib/chat.mjs';
+import { chatStatus, chatAsk, chatWarm } from './lib/chat.mjs';
 import { agentUpload } from './lib/agent.mjs';
 import { voiceAsk, voiceWarm, voiceReset } from './lib/voice.mjs';
 import { gitStatus, gitSyncRun } from './lib/gitsync.mjs';
@@ -82,6 +82,7 @@ async function api(req, res, url) {
   if (p === '/api/voice/reset' && m === 'POST') return json(res, 200, voiceReset());
   if (p === '/api/voice/ask' && m === 'POST') return voiceAsk(await readBody(req, 20_000), req, res);
   if (p === '/api/chat' && m === 'POST') return json(res, 200, await chatAsk(await readBody(req)));
+  if (p === '/api/chat/warm' && m === 'POST') return json(res, 200, await chatWarm());
   if (p === '/api/health') return json(res, 200, { ok: exists(path.join(VAULT, '1 Human')), vault: VAULT });
   if (p === '/api/habits' && m === 'GET') return json(res, 200, getHabits(q.get('from'), q.get('to')));
   if (p === '/api/habits' && m === 'POST') return json(res, 200, setHabit(await readBody(req)));
