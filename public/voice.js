@@ -464,6 +464,7 @@
   // Inside the LifeOS Android app, and only when "Listening: Android" is chosen in its menu, the phone's recognizer listens and its text comes
   // back through the app (no recording to transcribe afterwards, so it is quick). If the app has no such support (an older build), or it fails
   // to start, the normal listening below (Whisper) is used.
+  const NATIVE_END_MS = 900; // quiet after your last word before the phone's listening is told to finish
   let nativeBroken = false; // the phone's recognizer failed once: use Whisper for the rest of this page's life
   const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
   const NERR = { 1: 'network timeout', 2: 'network', 3: 'audio', 4: 'server', 5: 'client', 8: 'recognizer busy', 9: 'no permission', 11: 'server disconnected', 12: 'language not supported', 13: 'language unavailable', '-1': 'could not start' };
@@ -485,9 +486,11 @@
     micRelease(); // the phone's recognizer needs the microphone for itself
     outAwake();
     return new Promise((resolve) => {
-      let finished = false, text = '', tEnd = 0, retried = false;
+      let finished = false, text = '', tEnd = 0, retried = false, quiet = null;
+      // The phone's recognizer decides you are done by its own timer (several seconds). Instead: when your words have not changed for a moment, tell it to finish now.
+      const armQuiet = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (!finished && text) nativePost({ cmd: 'stop' }); }, NATIVE_END_MS); };
       const fin = (t, err) => {
-        if (finished) return; finished = true; clearTimeout(idle); nativeActive = false; window.reneeNative = null;
+        if (finished) return; finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null;
         if (err) { cb.error(err); return; }
         if (tEnd) timing.stt = Math.round(performance.now() - tEnd); // from the end of your words to the text
         stt.device = 'android';
@@ -500,7 +503,7 @@
         if (e.type === 'ready') cb.status('listening');
         else if (e.type === 'speech') cb.status('hearing');
         else if (e.type === 'end') tEnd = performance.now();
-        else if (e.type === 'partial') { if (e.text) text = e.text; }
+        else if (e.type === 'partial') { if (e.text) { text = e.text; if (cb.partial) cb.partial(text); armQuiet(); } }
         else if (e.type === 'final') fin(e.text || text);
         else if (e.type === 'error') {
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
@@ -510,7 +513,7 @@
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
             nativeBroken = true;
             nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper');
-            finished = true; clearTimeout(idle); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
+            finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
             listen(cb);
           }
         }
@@ -619,6 +622,6 @@
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
     preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
-    makeVad, loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
+    makeVad, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();

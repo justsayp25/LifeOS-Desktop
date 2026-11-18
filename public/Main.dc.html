@@ -747,15 +747,17 @@ class Component extends DCLogic {
     };
     const talkListen = () => {
       const R = RV();
-      if (!R || R.stt.failed) { talkListenBrowser(); return; }
+      if (!R || (R.stt.failed && !(R.nativeOn && R.nativeOn()))) { talkListenBrowser(); return; } // Whisper failing to load does not matter when the phone's own listening is chosen
       this.setState({ talk: 'listening', talkText: '', voiceNote: '' });
       R.listen({
         status: (st, p) => {
           if (!((this.state || {}).talk)) return;
           if (st === 'loading') this.setState({ voiceNote: (p && p < 100 ? 'Downloading voice, first time only (' + p + '%)...' : 'Setting up voice on your graphics card, up to a minute, first time only...') });
           else if (st === 'listening') this.setState({ voiceNote: '', talkText: '' });
-          else if (st === 'hearing') this.setState({ talkText: 'Listening...' });
-          else if (st === 'thinking') this.setState({ talkText: 'Transcribing...' });
+          else if (st === 'hearing') this.setState({ talkText: '' });
+          else if (st === 'thinking') this.setState({ talkText: '' });
+        },
+        partial: (t) => { if (!((this.state || {}).talk)) return; this.setState({ talkText: String(t || '') }); // the words you are saying, shown as you say them (the phone's own listening)
         },
         text: (t) => { if (!((this.state || {}).talk)) return; t = (t || '').trim(); if (!t) { this._empty = (this._empty || 0) + 1; if (this._empty < 3) { talkListen(); return; } this._empty = 0; this.setState({ talk: '', voiceNote: "Didn't hear anything. Tap the orb to start again." }); return; } this._empty = 0; talkAsk(t); },
         error: (code) => {
@@ -768,7 +770,7 @@ class Component extends DCLogic {
     };
     const atts = (s.atts || []).map((a, i) => ({ name: a.name, remove: () => this.setState({ atts: (((this.state || {}).atts) || []).filter((_, j) => j !== i) }) }));
     const talk = s.talk || '';
-    const TALK = { listening: ['Listening', "Speak when you're ready.", '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Searching the vault and the web.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'Tap Interrupt to stop her.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
+    const TALK = { listening: ['Listening', "Speak when you're ready.", '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Working on it.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'Tap Interrupt to stop her.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
     const tv = TALK[talk] || TALK.listening;
     const hasDraft = !!((s.draft || '').trim()) || atts.length > 0;
     const startVoice = () => {
@@ -916,7 +918,7 @@ class Component extends DCLogic {
       atts, hasAtts: atts.length > 0, attachOpen: !!s.attachOpen, showSend: hasDraft, noSend: !hasDraft,
       toggleAttach: () => this.setState({ attachOpen: !(this.state || {}).attachOpen }),
       pickCam: addFiles, pickPhoto: addFiles, pickFile: addFiles,
-      talkOn: !!talk, talkLabel: tv[0], talkCaption: tv[1], orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
+      talkOn: !!talk, talkLabel: tv[0], talkCaption: ((s.talkText || '').trim() || tv[1]), orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
       toggleTalk: () => { stopVoice(); talkStop(); if ((this.state || {}).talk) this.setState({ talk: '' }); else { this.setState({ chatOpen: true, attachOpen: false }); try { RV() && RV().preload(); } catch (err) {} talkListen(); } },
       cycleTalk: () => { const c = (this.state || {}).talk; if (c === 'listening') { try { if (this._rec) this._rec.stop(); else if (RV()) RV().finishListen(); } catch (err) {} } else if (c === 'speaking') { talkStop(); talkListen(); } },
       voiceName: String(RV() && !RV().tts.failed ? RV().voiceId().replace(/^[a-z]{2}_/, '').replace(/^./, (c) => c.toUpperCase()) : (s.voiceName || (chosenVoice() || {}).name || 'default')).replace(/^Microsoft\s+/, '').replace(/\s+-\s+English.*$/, '').slice(0, 32),
