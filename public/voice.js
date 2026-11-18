@@ -464,7 +464,11 @@
   // Inside the LifeOS Android app, and only when "Listening: Android" is chosen in its menu, the phone's recognizer listens and its text comes
   // back through the app (no recording to transcribe afterwards, so it is quick). If the app has no such support (an older build), or it fails
   // to start, the normal listening below (Whisper) is used.
-  const nativeWanted = () => { try { return !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
+  let nativeBroken = false; // the phone's recognizer failed once: use Whisper for the rest of this page's life
+  const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
+  const NERR = { 1: 'network timeout', 2: 'network', 3: 'audio', 4: 'server', 5: 'client', 8: 'recognizer busy', 9: 'no permission', 11: 'server disconnected', 12: 'language not supported', 13: 'language unavailable', '-1': 'could not start' };
+  // written to the server log too (grep "voice timing" ~/lifeos-server.log), so a failure on the phone can be read without a browser console
+  const nativeReport = (msg) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: 'android', tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
   function nativePost(o) { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'stt' }, o))); } catch (e) {} }
   let nativeOk = null;
   const nativeProbe = () => new Promise((resolve) => {
@@ -501,7 +505,13 @@
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
           if (e.code === 6 || e.code === 7) fin(text);
           else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 }); }, 300); }
-          else fin('', 'stt-failed');
+          else {
+            // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
+            nativeBroken = true;
+            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper');
+            finished = true; clearTimeout(idle); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
+            listen(cb);
+          }
         }
       } };
       nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 });
