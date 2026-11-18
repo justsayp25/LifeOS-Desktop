@@ -508,7 +508,7 @@
     micRelease(); // the phone's recognizer needs the microphone for itself
     outAwake();
     return new Promise((resolve) => {
-      let finished = false, text = '', tEnd = 0, retried = false, quiet = null;
+      let finished = false, text = '', tEnd = 0, retried = false, quiet = null; let failTries = 0;
       const tr0 = performance.now(), trace = []; let nPartial = 0;
       const mark = (n) => { if (trace.length < 14) trace.push(n + ' ' + ((performance.now() - tr0) / 1000).toFixed(1) + 's'); };
       // The phone's recognizer decides you are done by its own timer (several seconds). Instead: when your words have not changed for a moment, tell it to finish now.
@@ -541,6 +541,14 @@
             nativeOnline = true;
             nativeReport('android listening: the offline language pack is not on this phone, using the normal recognizer (it uses the network)');
             nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300);
+          }
+          else if (failTries < 3 && !text) {
+            // Android's speech service often drops the connection on the first start after the app opens (error 11 "server disconnected", 5, 3...): the
+            // second start works. Start again by itself, a little later each time, so you do not have to speak twice.
+            failTries++;
+            mark('retry ' + failTries + ' after code ' + e.code);
+            nativePost({ cmd: 'cancel' });
+            setTimeout(() => { if (!finished) startNative(); }, 400 + failTries * 400);
           }
           else {
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
