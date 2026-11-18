@@ -229,7 +229,7 @@
   function speaker(onend, mark) {
     stopAudio();
     const gen = player.gen;
-    const useK = !!tts.engine && !tts.failed;
+    const useK = !!tts.engine && !tts.failed && !phoneVoice();
     const voice = voiceId();
     let buf = '', synth = Promise.resolve(), play = Promise.resolve(), count = 0, ended = false, fin = false;
     const emit = (raw) => {
@@ -266,6 +266,7 @@
   }
   // Returns true when Kokoro is handling it; false means "use the browser voice".
   function speak(text, onend) {
+    if (phoneVoice()) return false; // the phone's own voice (the page speaks with the browser voice)
     if (!tts.engine || tts.failed) { loadTts().catch(() => {}); return false; }
     const sp = speaker(onend);
     sp.feed(text + ' '); sp.end();
@@ -334,8 +335,16 @@
     })();
     return me;
   }
-  function voiceId() { let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
-  function nextVoice() { const i = VOICES.indexOf(voiceId()); const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n; }
+  // The phone's own voice (Android's speech engine through the browser): starts speaking at once and sounds like the phone's assistant; chosen as the
+  // last stop of "Voice: ... change" (after the Kokoro voices), kept in lifeos.tts = 'phone'.
+  function phoneVoice() { try { return localStorage.getItem('lifeos.tts') === 'phone' && !!window.speechSynthesis; } catch (e) { return false; } }
+  function voiceId() { if (phoneVoice()) return 'phone'; let v = ''; try { v = localStorage.getItem('lifeos.kvoice') || ''; } catch (e) {} return VOICES.includes(v) ? v : VOICES[0]; }
+  function nextVoice() {
+    if (phoneVoice()) { try { localStorage.removeItem('lifeos.tts'); localStorage.setItem('lifeos.kvoice', VOICES[0]); } catch (e) {} return VOICES[0]; }
+    const i = VOICES.indexOf(voiceId());
+    if (i === VOICES.length - 1 && window.speechSynthesis) { try { localStorage.setItem('lifeos.tts', 'phone'); } catch (e) {} return 'phone'; }
+    const n = VOICES[(i + 1) % VOICES.length]; try { localStorage.setItem('lifeos.kvoice', n); } catch (e) {} return n;
+  }
 
   // ---- listening ----
   // One microphone stream stays open for the whole conversation. Opening and closing it every turn made Bluetooth headsets and
