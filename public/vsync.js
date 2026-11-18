@@ -204,7 +204,7 @@
     const timers = {}; const created = {}; let warned = {};
     const load = () => V.get('/api/lib?domain=' + domain).then((j) => {
       const st = inst.state; const keep = (st.libNotes || []).filter((n) => isTemp(n.id));
-      apply(inst, { libNotes: j.notes.concat(keep) });
+      apply(inst, { libNotes: j.notes.concat(keep), libYears: j.years || {} });
     }).catch(() => {});
     const swapId = (from, to, extra) => {
       const notes = (inst.state.libNotes || []).map((n) => (n.id === from ? Object.assign({}, n, { id: to }, extra || {}) : n));
