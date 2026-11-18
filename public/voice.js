@@ -487,7 +487,8 @@
   const startNative = () => nativePost({ cmd: 'start', lang: '', silenceMs: 900, offline: !nativeOnline }); // lang '' = the phone's own language
   const NATIVE_END_MS = 900; // quiet after your last word before the phone's listening is told to finish
   let nativeBroken = false; // the phone's recognizer failed once: use Whisper for the rest of this page's life
-  const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
+  const inApp = () => { try { return !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android'); } catch (e) { return false; } };
+  const nativeWanted = () => inApp(); // inside the app the phone's own listening is the only listening (Whisper is not used there)
   const NERR = { 1: 'network timeout', 2: 'network', 3: 'audio', 4: 'server', 5: 'client', 8: 'recognizer busy', 9: 'no permission', 11: 'server disconnected', 12: 'language not supported', 13: 'language unavailable', '-1': 'could not start' };
   // written to the server log too (grep "voice timing" ~/lifeos-server.log), so a failure on the phone can be read without a browser console
   const nativeReport = (msg) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: 'android', tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
@@ -543,10 +544,9 @@
           }
           else {
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
-            nativeBroken = true;
-            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', using Whisper | what happened: ' + trace.join(', '));
+            nativeReport('android listening failed: ' + (NERR[e.code] || ('code ' + e.code)) + (e.text ? ' ' + String(e.text).slice(0, 60) : '') + ', tap to try again | what happened: ' + trace.join(', '));
             finished = true; clearTimeout(idle); clearTimeout(quiet); nativeActive = false; window.reneeNative = null; nativePost({ cmd: 'cancel' });
-            listen(cb);
+            cb.error('phone-stt');
           }
         }
       } };
@@ -557,7 +557,7 @@
   }
 
   async function listen(cb) {
-    if (nativeWanted()) { const r = await listenNative(cb); if (r !== null) return r; }
+    if (nativeWanted()) { const r = await listenNative(cb); if (r !== null) return r; if (inApp()) { cb.error('phone-stt'); return false; } }
     stopListen(true);
     const myGen = listenGen;
     outAwake(); // keep the speakers/headset awake for the whole conversation
@@ -653,7 +653,7 @@
 
   window.reneeVoice = {
     stt, tts, timing, ask, nativeSpeak, get voices() { return VOICES; }, voiceId, nextVoice,
-    preload() { loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
+    preload() { if (!inApp()) loadStt().catch(() => {}); loadTts().catch(() => {}); try { fetch('/api/voice/warm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {}); } catch (e) {} },
     makeVad, speaker, nativeOn: () => nativeWanted(), loadStt, loadTts, listen, stopListen, micLabel, cycleMic, finishListen() { if (nativeActive) nativePost({ cmd: 'stop' }); else if (mic && mic.finish) mic.finish(); }, speak, stopSpeak, clean, sentences, downsample,
   };
 })();

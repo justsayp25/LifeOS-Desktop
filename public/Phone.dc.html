@@ -714,6 +714,7 @@ class Component extends DCLogic {
           if (!((this.state || {}).talk)) return;
           if (code === 'blocked') this.setState({ talk: '', voiceNote: 'The microphone is blocked. Allow it in the browser.' });
           else if (code === 'no-mic') this.setState({ talk: '', voiceNote: 'No microphone found.' });
+          else if (code === 'phone-stt') this.setState({ talk: '', voiceNote: "The phone's listening didn't work. Tap the orb to try again." });
           else talkListenBrowser();
         },
       });
