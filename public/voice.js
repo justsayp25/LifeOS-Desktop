@@ -470,17 +470,18 @@
   // written to the server log too (grep "voice timing" ~/lifeos-server.log), so a failure on the phone can be read without a browser console
   const nativeReport = (msg) => { try { console.warn('[renee]', msg); fetch('/api/voice/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: msg, stt: 'android', tts: tts.device || '', endMs: 0 }) }).catch(() => {}); } catch (e) {} };
   function nativePost(o) { try { window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: 'stt' }, o))); } catch (e) {} }
-  let nativeOk = null;
+  let nativeOk = null, nativeNoted = false;
   const nativeProbe = () => new Promise((resolve) => {
     if (nativeOk !== null) return resolve(nativeOk);
-    const t = setTimeout(() => { window.reneeNative = null; nativeOk = false; resolve(false); }, 1500);
-    window.reneeNative = { onEvent(e) { if (e && e.type === 'probe') { clearTimeout(t); window.reneeNative = null; nativeOk = !!e.ok; resolve(nativeOk); } } };
+    const t = setTimeout(() => { window.reneeNative = null; nativeOk = false; nativeReport('android listening not used: the app did not answer (an older app build?), using Whisper'); resolve(false); }, 1500);
+    window.reneeNative = { onEvent(e) { if (e && e.type === 'probe') { clearTimeout(t); window.reneeNative = null; nativeOk = !!e.ok; if (!nativeOk) nativeReport('android listening not used: this phone has no speech recognizer available to the app, using Whisper'); resolve(nativeOk); } } };
     nativePost({ cmd: 'probe' });
   });
   async function listenNative(cb) {
     stopListen(true);
     const myGen = listenGen;
     if (!(await nativeProbe()) || myGen !== listenGen) return null; // not there: the normal listening takes over
+    if (!nativeNoted) { nativeNoted = true; nativeReport('android listening is on (the phone recognizes your speech)'); }
     micRelease(); // the phone's recognizer needs the microphone for itself
     outAwake();
     return new Promise((resolve) => {
