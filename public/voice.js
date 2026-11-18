@@ -464,6 +464,8 @@
   // Inside the LifeOS Android app, and only when "Listening: Android" is chosen in its menu, the phone's recognizer listens and its text comes
   // back through the app (no recording to transcribe afterwards, so it is quick). If the app has no such support (an older build), or it fails
   // to start, the normal listening below (Whisper) is used.
+  let nativeOnline = false; // the offline language pack is missing on this phone: let its normal recognizer use the network
+  const startNative = () => nativePost({ cmd: 'start', lang: '', silenceMs: 900, offline: !nativeOnline }); // lang '' = the phone's own language
   const NATIVE_END_MS = 900; // quiet after your last word before the phone's listening is told to finish
   let nativeBroken = false; // the phone's recognizer failed once: use Whisper for the rest of this page's life
   const nativeWanted = () => { try { return !nativeBroken && !!(window.ReactNativeWebView && window.__LIFEOS_APP === 'android' && localStorage.getItem('lifeos.sttEngine') === 'android'); } catch (e) { return false; } };
@@ -508,7 +510,13 @@
         else if (e.type === 'error') {
           // 6 = it heard nothing for a while, 7 = nothing it could recognise: the same as "nothing heard"; 8 = busy (try once more); other = failed
           if (e.code === 6 || e.code === 7) fin(text);
-          else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 }); }, 300); }
+          else if (e.code === 8 && !retried) { retried = true; nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300); }
+          else if ((e.code === 12 || e.code === 13) && !nativeOnline) {
+            // the on-device language is not downloaded: use the phone's normal recognizer once (it may use the network) instead of giving up
+            nativeOnline = true;
+            nativeReport('android listening: the offline language pack is not on this phone, using the normal recognizer (it uses the network)');
+            nativePost({ cmd: 'cancel' }); setTimeout(() => { if (!finished) startNative(); }, 300);
+          }
           else {
             // anything else: the phone's recognizer does not work here. Say why in the log and carry on with Whisper, so the conversation never stops.
             nativeBroken = true;
@@ -518,7 +526,7 @@
           }
         }
       } };
-      nativePost({ cmd: 'start', lang: 'en-US', silenceMs: 900 });
+      startNative();
       cb.status('listening');
       resolve(true);
     });
