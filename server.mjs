@@ -13,6 +13,7 @@ import { actionDone, actionDeclined } from './lib/actions.mjs';
 import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
 import { themedFile, themeOf } from './lib/theme.mjs';
 import { gymImportRun, gymImportStatus, startGymImport } from './lib/gymimport.mjs';
+import { mirrorHistory } from './lib/gymmirror.mjs';
 import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
 import { listReviews, createReview, binReview } from './lib/reviews.mjs';
@@ -73,6 +74,7 @@ async function api(req, res, url) {
   if (p === '/api/autosync' && m === 'GET') return json(res, 200, autosyncStatus());
   if (p === '/api/autosync' && m === 'POST') { const b = await readBody(req, 2000); return json(res, 200, autosyncSet(!!(b && b.on))); }
   if (p === '/api/gymimport/status' && m === 'GET') return json(res, 200, gymImportStatus());
+  if (p === '/api/gym/history' && m === 'GET') return json(res, 200, mirrorHistory(Number(q.get('limit')) || 400));
   if (p === '/api/gymimport/run' && m === 'POST') return json(res, 200, gymImportRun({ repair: q.get('repair') }));
   if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());
   if (p === '/api/gitsync/run' && m === 'POST') return json(res, 200, await gitSyncRun());
