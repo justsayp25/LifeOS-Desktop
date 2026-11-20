@@ -1,0 +1,36 @@
+// Tests editing a task in place on a THROWAWAY vault. Run: node tools/test-edit-task.mjs
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+const V = fs.mkdtempSync(path.join(os.tmpdir(), 'et-')); const w = (rel, t) => { const f = path.join(V, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); return f; };
+const NOTE = w('1 Human/03 Tasks/Current Tasks/Current Tasks.md', '---\ntype: tasks\n---\n# Current Tasks\n\n- [ ] Call dentist [due:: 2026-11-20] [priority:: High] [created:: 2026-11-01]\n- [x] Pay rent [due:: 2026-11-01] ✅ 2026-11-14\n- [ ] Buy milk\n  - [ ] Oat milk\n- [ ] Water plants [due:: 2026-11-21] [time:: 09:00] [repeat:: weekly]\n');
+w('1 Human/04 Projects/Garden/Garden.md', '---\nstatus: active\n---\n# Garden\n\n## Tasks\n- [ ] Buy seeds\n');
+process.env.VAULT_PATH = V;
+const T = await import(new URL('../lib/tasks.mjs', import.meta.url).href);
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const find = (t) => T.listTasks().tasks.find((x) => x.title === t);
+const file = () => fs.readFileSync(NOTE, 'utf8');
+const bad = (id, b) => { try { T.editTask(id, b); return ''; } catch (e) { return e.message; } };
+
+let t = find('Call dentist'); let r = T.editTask(t.id, { title: 'Call the dentist about the crown', dueKey: '2026-11-25', time: '14:30', priority: 'Medium' });
+let n = find('Call the dentist about the crown');
+ok(n && n.dueKey === '2026-11-25' && n.time === '14:30' && n.priority === 'Medium' && n.id === r.id, 'title, due date, time and priority are changed; the new id is returned');
+ok(/\[created:: 2026-11-01\]/.test(file()), 'a field the editor does not know ([created::]) is kept');
+ok(!find('Call dentist') && (file().match(/Call the dentist/g) || []).length === 1, 'the task was changed, not copied');
+r = T.editTask(n.id, { title: 'Call the dentist about the crown', dueKey: '' }); n = find('Call the dentist about the crown');
+ok(n.dueKey === '' && n.time === '', 'clearing the due date also clears its time');
+t = find('Pay rent'); r = T.editTask(t.id, { title: 'Pay rent (November)' }); n = find('Pay rent (November)');
+ok(n && n.done && /✅ 2026-11-14/.test(file()) && n.dueKey === '2026-11-01', 'a finished task keeps its done date and its other fields');
+t = find('Buy milk'); T.editTask(t.id, { title: 'Buy oat milk', project: 'garden' }); n = find('Buy oat milk');
+ok(n && n.project === 'Garden' && /^  - \[ \] Oat milk$/m.test(file()), 'a project can be set (matched ignoring case); the sub-task under it is untouched');
+t = find('Water plants'); T.editTask(t.id, { repeat: '' }); n = find('Water plants');
+ok(n.repeat === '' && n.dueKey === '2026-11-21' && n.time === '09:00', 'only the sent field changes (repeat cleared, date and time kept)');
+t = find('Buy seeds'); T.editTask(t.id, { dueKey: '2026-12-01' }); ok(find('Buy seeds').dueKey === '2026-12-01', 'a task inside a project note can be edited too');
+t = find('Water plants');
+ok(/title/i.test(bad(t.id, { title: '   ' })), 'an empty title is refused');
+ok(/YYYY-MM-DD/.test(bad(t.id, { dueKey: '2026-13-45' })), 'a bad date is refused');
+ok(/HH:MM/.test(bad(t.id, { time: '25:61' })), 'a bad time is refused');
+ok(/Priority/.test(bad(t.id, { priority: 'urgent' })), 'a bad priority is refused');
+ok(/no project/.test(bad(t.id, { project: 'Nope' })), 'an unknown project is refused');
+ok(bad('not-an-id', { title: 'x' }) !== '', 'a made-up id is refused');
+n = T.editTask(find('Water plants').id, { title: 'Water [[plants]] [due:: 1999-01-01] (priority:: High)\nnext' }); const w2 = T.listTasks().tasks.find((x) => /Water/.test(x.title));
+ok(w2 && !/\[|\]|::|\n/.test(w2.title) && w2.dueKey === '2026-11-21' && w2.priority === '', 'brackets, field syntax and new lines cannot be smuggled into a title: "' + (w2 && w2.title) + '"');
+fs.rmSync(V, { recursive: true, force: true }); console.log(fails ? fails + ' FAILED' : 'ALL PASSED'); process.exit(fails ? 1 : 0);

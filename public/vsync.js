@@ -35,9 +35,13 @@
   const proto = window.DCLogic && window.DCLogic.prototype;
   if (!proto) return;
   const orig = proto.setState;
+  // when the agent panel opens, start the chat process in the background so the first question is not slow (at most every 5 minutes)
+  let warmAt = 0;
+  const warmChat = () => { const t = Date.now(); if (t - warmAt < 300000) return; warmAt = t; try { const r = V.post('/api/chat/warm', {}); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
   proto.setState = function (o, cb) {
     const prev = this.state;
     orig.call(this, o, cb);
+    try { if (this.state && this.state.chatOpen && !(prev && prev.chatOpen)) warmChat(); } catch (e) {}
     if (this._vhooks && !this._vapply) for (const h of this._vhooks) { try { h(prev, this.state); } catch (e) { console.error(e); } }
   };
   const apply = (inst, patch) => { inst._vapply = true; try { inst.setState(patch); } finally { inst._vapply = false; } };
@@ -79,6 +83,7 @@
         if (isTemp(id)) (creating[id] || Promise.resolve(null)).then(go); else go(id);
       });
     });
+    V.reloadTasks = load;
     load(); poller(load, 20000);
   }
 
@@ -203,7 +208,7 @@
     const timers = {}; const created = {}; let warned = {};
     const load = () => V.get('/api/lib?domain=' + domain).then((j) => {
       const st = inst.state; const keep = (st.libNotes || []).filter((n) => isTemp(n.id));
-      apply(inst, { libNotes: j.notes.concat(keep) });
+      apply(inst, { libNotes: j.notes.concat(keep), libYears: j.years || {} });
     }).catch(() => {});
     const swapId = (from, to, extra) => {
       const notes = (inst.state.libNotes || []).map((n) => (n.id === from ? Object.assign({}, n, { id: to }, extra || {}) : n));

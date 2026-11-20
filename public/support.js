@@ -15,6 +15,16 @@
     forceUpdate(cb) { this._schedule(cb); }
     _schedule(cb) { if (this._r) this._r(cb); }
   }
+  // The pages used to redraw EVERYTHING every second just to move the clock (about 50 ms of work each time on a slowed-down phone CPU).
+  // Now the seconds are written straight into the clock text, and the page is redrawn only when the minute changes.
+  DCLogic.prototype._tickClock = function () {
+    const now = Date.now(), last = (this.state && this.state.now) || 0;
+    if (!last || Math.floor(now / 60000) !== Math.floor(last / 60000)) { this.setState({ now }); return; }
+    this.state.now = now; // a later redraw (a tap, a sync) then already has the right time
+    const d = new Date(now), pad = (n) => String(n).padStart(2, '0'), h = d.getHours();
+    const txt = pad(this.props && this.props.hour12 === false ? h : (h % 12 || 12)) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    for (const e of document.querySelectorAll('[data-live-clock]')) if (e.textContent !== txt) e.textContent = txt;
+  };
   window.DCLogic = DCLogic;
 
   // ---------- vault bridge ----------
@@ -47,14 +57,118 @@
       try { vault.openChat(fallbackPrompt); } catch (e) {}
       done(why + ' I opened the Claude app instead, with your question filled in. Approve the folder prompt there, then send.');
     };
+    // The answer streams in as it is written ({d}), with what she is doing ({status}); an older server without the stream route answers in one piece.
+    const streamChat = async (body, onText) => {
+      const r = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok || !r.body || !r.body.getReader) return null;
+      const rd = r.body.getReader(), dec = new TextDecoder();
+      let buf = '', text = '', status = '', final = null, last = 0, waiting = false, over = false;
+      const push = (force) => {
+        if (!onText || over) return;
+        const now = Date.now();
+        if (!force && now - last < 70) { if (!waiting) { waiting = true; setTimeout(() => { waiting = false; push(true); }, 70); } return; }
+        last = now; try { onText(plain(text), status); } catch (e) {}
+      };
+      try {
+        for (;;) {
+          const { value, done: end } = await rd.read(); if (end) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue;
+            let j; try { j = JSON.parse(line); } catch (e) { continue; }
+            if (j.d) { text += j.d; push(false); }
+            else if (j.reset) { text = ''; push(true); }
+            else if (j.status) { status = j.status; if (!text) push(true); }
+            else if (j.done) final = j;
+            else if (j.error) { const err = new Error(j.error); err.status = j.code; throw err; }
+          }
+        }
+      } finally { over = true; }
+      if (!final) throw new Error('The answer was cut off. Try again.');
+      return final;
+    };
+    const chat1 = async (body) => { const s = await streamChat(body, o.onText); return s === null ? vault.post('/api/chat', body) : s; };
     try {
-      let r = await vault.post('/api/chat', { text, session: sget(), files: o.files || [], model: o.model || '' });
-      if (!r.ok && !r.unavailable && sget()) { sset(''); r = await vault.post('/api/chat', { text, session: '', files: o.files || [], model: o.model || '' }); }
+      const body = { text, session: sget(), files: o.files || [], model: o.model || '' };
+      let r = await chat1(body);
+      if (!r.ok && !r.unavailable && sget()) { sset(''); r = await chat1({ ...body, session: '' }); }
       if (r.unavailable) return fall('Claude Code is not set up on this computer.');
       if (!r.ok) return done(r.error || "That didn't work. Try again.");
       if (r.session) sset(r.session);
-      done(plain(r.text));
+      done(plain(r.text), r.proposed || []);
     } catch (e) { done(e && e.status === 429 ? 'Still answering the last question. Give it a moment.' : "Couldn't reach the server. Is the LifeOS window still open?"); }
+  };
+  // R.E.N.E.E. only proposes (the server checked every field). Nothing is written until Jess says Yes; then these existing routes do it.
+  const ymd = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+  vault.confirmAction = async (p) => {
+    try {
+      const a = p.args || {};
+      if (p.type === 'add_task') await vault.post('/api/tasks', a);
+      else if (p.type === 'complete_task') await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(a.id), { done: true });
+      else if (p.type === 'tick_habit') await vault.post('/api/habits', a);
+      else if (p.type === 'add_event') await vault.post('/api/events', a);
+      else if (p.type === 'add_capture') {
+        const date = ymd(), cur = await vault.get('/api/daily?date=' + date), old = String(cur.captures || '').trim();
+        await vault.post('/api/daily', { date, field: 'captures', text: old ? old + '\n' + a.text : a.text, base: cur.captures || '' });
+      } else throw new Error('That change is not allowed.');
+      vault.post('/api/actions/done', { id: p.id, ok: true }).catch(() => {});
+      try { window.__dc && window.__dc._r(); } catch (e) {}
+      return { ok: true };
+    } catch (e) {
+      const msg = (e && e.message) || "That didn't work.";
+      vault.post('/api/actions/done', { id: p.id, ok: false, error: msg }).catch(() => {});
+      return { ok: false, message: msg };
+    }
+  };
+  vault.declineAction = (p) => { try { return vault.post('/api/actions/declined', { id: p.id }).catch(() => {}); } catch (e) { return null; } };
+  // Spoken answers: "yes" / "no" (and the usual ways of saying them) to a read-back question. null = neither.
+  vault.yesNo = (t) => {
+    const s = String(t || '').toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|do it|go ahead|please do|that's right|correct|affirmative)\b/.test(s)) return true;
+    if (/^(no|nope|nah|cancel|don't|do not|stop|never mind|nevermind|negative|wrong)\b/.test(s)) return false;
+    return null;
+  };
+  // ---- edit a task: tap its title anywhere a task is listed. Changes the task in its note (PATCH /api/tasks/:id). ----
+  vault.editTask = async (t) => {
+    if (!t || !t.id || document.getElementById('lifeos-edit')) return;
+    const mk = (tag, css, attrs) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+    const FIELD = 'width:100%;box-sizing:border-box;height:44px;padding:0 12px;border-radius:12px;background:#222;border:1px solid #333;color:#F5F5F5;font:inherit;font-size:15px;color-scheme:dark;';
+    const LAB = 'font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;color:#8A8A8A;margin:12px 0 5px;display:block;';
+    const root = mk('div', 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;', { id: 'lifeos-edit' });
+    const scrim = mk('button', 'position:absolute;inset:0;border:0;padding:0;background:rgba(0,0,0,.55);cursor:default;', { type: 'button', 'aria-label': 'Close' });
+    const box = mk('div', 'position:relative;width:100%;max-width:480px;max-height:92vh;overflow:auto;box-sizing:border-box;padding:18px 16px calc(18px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;background:#1A1A1A;border:1px solid #333;color:#F5F5F5;font-family:"IBM Plex Sans",sans-serif;', { role: 'dialog', 'aria-label': 'Edit task' });
+    const head = mk('div', 'font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:18px;'); head.textContent = 'Edit task';
+    const field = (label, el) => { const l = mk('label', LAB); l.textContent = label; box.appendChild(l); box.appendChild(el); return el; };
+    box.appendChild(head);
+    const title = field('TITLE', mk('input', FIELD, { type: 'text', 'aria-label': 'Task title', maxlength: '300' })); title.value = t.title || '';
+    const due = field('DUE DATE', mk('input', FIELD, { type: 'date', 'aria-label': 'Due date' })); due.value = t.dueKey || '';
+    const time = field('TIME (needs a due date)', mk('input', FIELD, { type: 'time', 'aria-label': 'Time' })); time.value = t.time || '';
+    const sel = (opts, cur, label) => { const s2 = mk('select', FIELD, { 'aria-label': label }); opts.forEach(([v, n]) => { const o = mk('option'); o.value = v; o.textContent = n; if (v === cur) o.selected = true; s2.appendChild(o); }); return s2; };
+    const pri = field('PRIORITY', sel([['', 'None'], ['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']], t.priority || '', 'Priority'));
+    const rep = field('REPEAT', sel([['', 'Never'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']], t.repeat || '', 'Repeat'));
+    let names = []; try { names = ((await vault.get('/api/projects')).projects || []).map((p) => p.name).filter(Boolean); } catch (e) {}
+    const proj = field('PROJECT', sel([['', 'None']].concat(names.map((n) => [n, n])), t.project || '', 'Project'));
+    const err = mk('div', 'min-height:18px;margin-top:10px;font-size:13px;color:#E08A82;', { role: 'alert' });
+    const row = mk('div', 'display:flex;gap:10px;margin-top:8px;');
+    const save = mk('button', 'flex:1;min-height:48px;border:0;border-radius:999px;background:#F5F5F5;color:#121212;font:inherit;font-size:15px;font-weight:700;cursor:pointer;', { type: 'button' }); save.textContent = 'Save';
+    const cancel = mk('button', 'flex:1;min-height:48px;border-radius:999px;background:#222;border:1px solid #333;color:#D0D0D0;font:inherit;font-size:15px;cursor:pointer;', { type: 'button' }); cancel.textContent = 'Cancel';
+    row.appendChild(save); row.appendChild(cancel); box.appendChild(err); box.appendChild(row);
+    root.appendChild(scrim); root.appendChild(box); document.body.appendChild(root);
+    const close = () => { try { root.remove(); } catch (e) {} document.removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } else if (e.key === 'Enter' && e.target === title) { e.preventDefault(); doSave(); } };
+    document.addEventListener('keydown', onKey, true);
+    scrim.onclick = close; cancel.onclick = close;
+    const doSave = async () => {
+      if (!title.value.trim()) { err.textContent = 'A task needs a title.'; title.focus(); return; }
+      save.disabled = true; save.style.opacity = '.55'; err.textContent = '';
+      try {
+        await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(t.id), { title: title.value, dueKey: due.value, time: due.value ? time.value : '', priority: pri.value, repeat: rep.value, project: proj.value });
+        close(); try { await (vault.reloadTasks && vault.reloadTasks()); } catch (e) {}
+      } catch (e) { err.textContent = (e && e.message) || "That didn't save."; save.disabled = false; save.style.opacity = ''; }
+    };
+    save.onclick = doSave;
+    setTimeout(() => { try { title.focus(); title.select(); } catch (e) {} }, 60);
   };
   vault.newChat = () => sset('');
   // Sends a photo or file picked in the chat to the vault (Photos or PDFs). Resolves { file: { name, path, ... } }.
@@ -127,6 +241,7 @@
       if (hasHole) v = isWhole(raw) ? lookup(raw.replace(/^\s*\{\{|\}\}\s*$/g, ''), scope) : interp(raw, scope);
       if (name === 'value' && (tag === 'input' || tag === 'textarea' || tag === 'select')) { el.value = v == null ? '' : String(v); el.setAttribute('value', el.value); continue; }
       if (name === 'checked' && tag === 'input') { el.checked = !!v; continue; }
+      if (name === 'data-lsrc') { if (v) el.setAttribute('src', String(v)); continue; } // an image whose address is filled in later: the browser must not fetch the unfilled template text (it made a failing request on 10 pages)
       if (v === false || v == null) { if (/^(aria-|data-)/.test(name) && v === false) el.setAttribute(name, 'false'); continue; }
       el.setAttribute(name, v === true ? (/^(aria-|data-)/.test(name) ? 'true' : '') : String(v));
     }
@@ -229,8 +344,14 @@
     if (cur !== want) { location.replace('/' + want + '.dc.html' + location.search + location.hash); return true; }
     return false;
   }
+  // Dark / light mode: the choice is the cookie lifeos_theme (the server sends the page with light colours when it says light). Dark is the default.
+  window.lifeosTheme = {
+    get: () => (/(?:^|;\s*)lifeos_theme=light\b/.test(document.cookie) ? 'light' : 'dark'),
+    set(v) { document.cookie = 'lifeos_theme=' + (v === 'light' ? 'light' : 'dark') + '; path=/; max-age=31536000; SameSite=Lax'; location.reload(); },
+    toggle() { this.set(this.get() === 'light' ? 'dark' : 'light'); },
+  };
   const fit = document.createElement('style');
-  fit.textContent = 'html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
+  fit.textContent = '@view-transition{navigation:auto} ::view-transition-group(root){animation-duration:.14s} *{-webkit-tap-highlight-color:transparent} :focus:not(:focus-visible){outline:none} html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
   document.head.appendChild(fit);
   const meta = document.createElement('meta'); meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; document.head.appendChild(meta);
   const man = document.createElement('link'); man.rel = 'manifest'; man.href = '/manifest.webmanifest'; document.head.appendChild(man);

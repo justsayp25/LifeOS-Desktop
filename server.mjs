@@ -1,5 +1,5 @@
 // LifeOS web app server. Serves the dashboard and a small API over the vault. No dependencies.
-import { chatStatus, chatAsk } from './lib/chat.mjs';
+import { chatStatus, chatAsk, chatAskStream, chatWarm } from './lib/chat.mjs';
 import { agentUpload } from './lib/agent.mjs';
 import { voiceAsk, voiceWarm, voiceReset } from './lib/voice.mjs';
 import { gitStatus, gitSyncRun } from './lib/gitsync.mjs';
@@ -9,10 +9,17 @@ import * as sync from './lib/sync.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, VAULT, PORT, HOST, HttpError, exists } from './lib/vault.mjs';
+import { actionDone, actionDeclined } from './lib/actions.mjs';
+import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
+import { themedFile, themeOf } from './lib/theme.mjs';
+import { gymImportRun, gymImportStatus, startGymImport } from './lib/gymimport.mjs';
+import { mirrorHistory, mirrorStatus } from './lib/gymmirror.mjs';
+import { vaultHistory } from './lib/gymvault.mjs';
+import { trainSummary } from './lib/trainsummary.mjs';
+import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
 import { listReviews, createReview, binReview } from './lib/reviews.mjs';
-import { listTasks, createTask, setTaskDone } from './lib/tasks.mjs';
+import { listTasks, createTask, editTask, setTaskDone } from './lib/tasks.mjs';
 import { getDaily, setDaily, listEvents, createEvent, deleteEvent } from './lib/daily.mjs';
 import { listProjects, createProject, patchProject, binProject } from './lib/projects.mjs';
 import { listEntries, addEntry, removeEntry } from './lib/finance.mjs';
@@ -64,15 +71,30 @@ async function api(req, res, url) {
   const p = url.pathname, q = url.searchParams, m = req.method;
   if (p === '/api/chat/status' && m === 'GET') return json(res, 200, await chatStatus());
   if (p === '/api/agent/upload' && m === 'POST') return json(res, 200, agentUpload(await readBody(req, 30_000_000)));
+  if (p === '/api/actions/done' && m === 'POST') return json(res, 200, actionDone(await readBody(req, 4000)));
+  if (p === '/api/actions/declined' && m === 'POST') return json(res, 200, actionDeclined(await readBody(req, 4000)));
+  if (p === '/api/autosync' && m === 'GET') return json(res, 200, autosyncStatus());
+  if (p === '/api/autosync' && m === 'POST') { const b = await readBody(req, 2000); return json(res, 200, autosyncSet(!!(b && b.on))); }
+  if (p === '/api/gymimport/status' && m === 'GET') return json(res, 200, gymImportStatus());
+  if (p === '/api/gym/history' && m === 'GET') {
+    // the phone reads the GymMane backup; a PC (no backup file) builds the same thing from the vault notes
+    const lim = Number(q.get('limit')) || 400;
+    return json(res, 200, mirrorStatus().sessions ? mirrorHistory(lim) : vaultHistory(lim));
+  }
+  if (p === '/api/train/summary' && m === 'GET') return json(res, 200, trainSummary(Number(q.get('weeks')) || 17));
+  if (p === '/api/gymimport/run' && m === 'POST') return json(res, 200, gymImportRun({ repair: q.get('repair') }));
   if (p === '/api/gitsync/status' && m === 'GET') return json(res, 200, await gitStatus());
   if (p === '/api/gitsync/run' && m === 'POST') return json(res, 200, await gitSyncRun());
   if (p === '/api/voice/native' && m === 'GET') { const st = nativeStatus(); if (st.ok) nativeWarm(); return json(res, 200, st); }
   if (p === '/api/voice/stt' && m === 'POST') return json(res, 200, await nativeStt(await readRaw(req, 4_000_000)));
   if (p === '/api/voice/tts' && m === 'POST') { const r = await nativeTts(await readBody(req, 20_000)); return send(res, 200, r.buf, { 'Content-Type': 'application/octet-stream', 'X-Sample-Rate': String(r.sampleRate) }); }
+  if (p === '/api/voice/timing' && m === 'POST') { const b = (await readBody(req, 2000)) || {}; const c = (v) => String(v == null ? '' : v).replace(/[^\w .,:;()+\-]/g, '').slice(0, 260); console.log('[voice timing] ' + c(b.line) + ' | listening: ' + c(b.stt) + ', speaking: ' + c(b.tts) + ', waits ' + c(b.endMs) + ' ms of quiet to end your turn'); return json(res, 200, { ok: true }); }
   if (p === '/api/voice/warm' && m === 'POST') return json(res, 200, await voiceWarm());
   if (p === '/api/voice/reset' && m === 'POST') return json(res, 200, voiceReset());
   if (p === '/api/voice/ask' && m === 'POST') return voiceAsk(await readBody(req, 20_000), req, res);
   if (p === '/api/chat' && m === 'POST') return json(res, 200, await chatAsk(await readBody(req)));
+  if (p === '/api/chat/warm' && m === 'POST') return json(res, 200, await chatWarm());
+  if (p === '/api/chat/stream' && m === 'POST') return chatAskStream(await readBody(req), req, res);
   if (p === '/api/health') return json(res, 200, { ok: exists(path.join(VAULT, '1 Human')), vault: VAULT });
   if (p === '/api/habits' && m === 'GET') return json(res, 200, getHabits(q.get('from'), q.get('to')));
   if (p === '/api/habits' && m === 'POST') return json(res, 200, setHabit(await readBody(req)));
@@ -84,7 +106,11 @@ async function api(req, res, url) {
   if (p === '/api/tasks' && m === 'GET') return json(res, 200, listTasks());
   if (p === '/api/tasks' && m === 'POST') return json(res, 200, createTask(await readBody(req)));
   let r = p.match(/^\/api\/tasks\/([^/]+)$/);
-  if (r && m === 'PATCH') { const b = await readBody(req); return json(res, 200, setTaskDone(decodeURIComponent(r[1]), !!b.done)); }
+  if (r && m === 'PATCH') {
+    const b = await readBody(req), tid = decodeURIComponent(r[1]);
+    if (['title', 'dueKey', 'time', 'priority', 'project', 'repeat'].some((k) => k in b)) return json(res, 200, editTask(tid, b)); // edit the task
+    return json(res, 200, setTaskDone(tid, !!b.done)); // tick or untick it
+  }
   // daily text + appointments
   if (p === '/api/daily' && m === 'GET') return json(res, 200, getDaily(q.get('date')));
   if (p === '/api/daily' && m === 'POST') return json(res, 200, setDaily(await readBody(req)));
@@ -131,10 +157,26 @@ function serveStatic(req, res, url) {
   if (p.endsWith('/')) p += 'index.html';
   const abs = path.join(PUBLIC, path.normalize(p));
   if (!abs.startsWith(PUBLIC + path.sep) || !exists(abs) || fs.statSync(abs).isDirectory()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' });
-  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream' });
+  // no-cache = the app asks again every time (cheap on this device), so a page that was updated is never shown from an old copy
+  const base = path.basename(abs);
+  if ((base.endsWith('.html') || /^(support|vsync|noteed)\.js$/.test(base)) && themeOf(req) === 'light') {
+    // light mode: the same page with its colours mapped (the file on disk is not changed)
+    return send(res, 200, themedFile(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'text/plain', 'Cache-Control': 'no-cache', 'Vary': 'Cookie' });
+  }
+  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': p.startsWith('/fonts/') ? 'public, max-age=31536000, immutable' : 'no-cache', ...(base.endsWith('.html') || /^(support|vsync|noteed)\.js$/.test(base) ? { 'Vary': 'Cookie' } : {}) });
 }
 
+// Optional idle stop (phone): IDLE_EXIT_MIN in .env. The server exits after that many minutes with no request at all.
+// The Android app sends /api/health every 30 s while it is open, so it counts as activity; 0 or unset = never stop.
+const IDLE_MIN = Number(env.IDLE_EXIT_MIN || 0);
+let lastHit = Date.now(), inFlight = 0;
+if (IDLE_MIN > 0) setInterval(() => {
+  if (inFlight === 0 && Date.now() - lastHit > IDLE_MIN * 60000) { console.log('Idle for ' + IDLE_MIN + ' min, stopping. Start it again any time.'); process.exit(0); }
+}, 30000).unref();
+
 const server = http.createServer(async (req, res) => {
+  lastHit = Date.now(); inFlight++;
+  res.on('close', () => { inFlight--; lastHit = Date.now(); });
   try {
     const url = new URL(req.url, 'http://x');
     // Other devices on the network may only talk to the sync. Everything else (the dashboard and its API) stays on this PC.
@@ -161,4 +203,6 @@ server.listen(PORT, HOST, () => {
   console.log(`Vault: ${VAULT}`);
   if (HOST !== '127.0.0.1' && HOST !== 'localhost') console.log('Phone sync is on: other devices on this network can reach the sync only (not the dashboard). Pair a phone at http://localhost:' + PORT + '/sync.html');
   if (!exists(path.join(VAULT, '1 Human'))) console.log('WARNING: no "1 Human" folder found there. Check VAULT_PATH in .env.');
+  startAutosync();
+  startGymImport();
 });
