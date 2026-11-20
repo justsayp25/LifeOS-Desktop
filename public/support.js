@@ -344,6 +344,12 @@
     if (cur !== want) { location.replace('/' + want + '.dc.html' + location.search + location.hash); return true; }
     return false;
   }
+  // Dark / light mode: the choice is the cookie lifeos_theme (the server sends the page with light colours when it says light). Dark is the default.
+  window.lifeosTheme = {
+    get: () => (/(?:^|;\s*)lifeos_theme=light\b/.test(document.cookie) ? 'light' : 'dark'),
+    set(v) { document.cookie = 'lifeos_theme=' + (v === 'light' ? 'light' : 'dark') + '; path=/; max-age=31536000; SameSite=Lax'; location.reload(); },
+    toggle() { this.set(this.get() === 'light' ? 'dark' : 'light'); },
+  };
   const fit = document.createElement('style');
   fit.textContent = '@view-transition{navigation:auto} ::view-transition-group(root){animation-duration:.14s} *{-webkit-tap-highlight-color:transparent} :focus:not(:focus-visible){outline:none} html,body{margin:0;min-height:100%;background:#121212} x-dc{display:contents} @media (max-width:760px){ body > x-dc > div[style*="width: 390px"]{width:100vw!important;height:100vh!important;height:100dvh!important} }';
   document.head.appendChild(fit);

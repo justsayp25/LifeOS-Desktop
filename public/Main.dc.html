@@ -141,6 +141,7 @@
       <span style="font-size: 13px;">{{syncLabel}}</span>
     </button>
     <sc-if value="{{autoShow}}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{toggleAuto}}" aria-label="Turn auto-sync on or off" style="display: block; width: 100%; padding: 2px 10px 6px 37px; color: #8A8A8A; background: none; border: 0; cursor: pointer; font: inherit; font-size: 11.5px; text-align: left;">{{autoLabel}}</button></sc-if>
+    <button type="button" onClick="{{toggleTheme}}" aria-label="{{themeAria}}" style="display: block; width: 100%; padding: 2px 10px 6px 37px; color: #8A8A8A; background: none; border: 0; cursor: pointer; font: inherit; font-size: 11.5px; text-align: left;">{{themeLabel}}</button>
     <sc-if value="{{hasSyncMsg}}" hint-placeholder-val="{{ false }}"><div style="padding: 0 10px 8px 37px; font-size: 11.5px; line-height: 1.45; color: #8A8A8A;">{{syncMsg}}</div></sc-if>
 
     <div style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px; background: #1A1A1A; border: 1px solid #292929;">
@@ -887,7 +888,7 @@ class Component extends DCLogic {
       toggleAreas: () => this.setState({ areasOpen: (this.state || {}).areasOpen === false }),
       toggleKnowledge: () => this.setState({ knowledgeOpen: (this.state || {}).knowledgeOpen === false }),
       toggleSidebar: () => this.setState({ sidebarOpen: (this.state || {}).sidebarOpen === false }),
-      syncVault: () => this._doSync(), toggleAuto: () => this._asToggle(), autoLabel: s.asOn === undefined ? 'Auto-sync' : 'Auto-sync: ' + (s.asOn ? 'on' : 'off'), autoShow: s.asAvail !== false && s.asOn !== undefined, syncLabel: s.syncBusy ? 'Syncing…' : 'Sync vault', syncMsg: s.syncMsg || '', hasSyncMsg: !!s.syncMsg,
+      themeIsLight: (window.lifeosTheme && window.lifeosTheme.get()) === 'light', themeLabel: 'Theme: ' + ((window.lifeosTheme && window.lifeosTheme.get()) === 'light' ? 'Light' : 'Dark') + ' · change', themeAria: ((window.lifeosTheme && window.lifeosTheme.get()) === 'light' ? 'Switch to dark mode' : 'Switch to light mode'), toggleTheme: () => window.lifeosTheme && window.lifeosTheme.toggle(), syncVault: () => this._doSync(), toggleAuto: () => this._asToggle(), autoLabel: s.asOn === undefined ? 'Auto-sync' : 'Auto-sync: ' + (s.asOn ? 'on' : 'off'), autoShow: s.asAvail !== false && s.asOn !== undefined, syncLabel: s.syncBusy ? 'Syncing…' : 'Sync vault', syncMsg: s.syncMsg || '', hasSyncMsg: !!s.syncMsg,
       clock, meridiem, dateLine, monthLabel,
       calOpen, calClosed: !calOpen, showToday: calOpen && offset !== 0,
       toggleCal: () => this.setState({ calOpen: !(this.state && this.state.calOpen), monthOffset: 0 }),

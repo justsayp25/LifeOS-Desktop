@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { actionDone, actionDeclined } from './lib/actions.mjs';
 import { autosyncStatus, autosyncSet, startAutosync } from './lib/autosync.mjs';
+import { themedFile, themeOf } from './lib/theme.mjs';
 import { gymImportRun, gymImportStatus, startGymImport } from './lib/gymimport.mjs';
 import { ROOT, VAULT, PORT, HOST, HttpError, exists, env } from './lib/vault.mjs';
 import { getHabits, setHabit } from './lib/habits.mjs';
@@ -148,7 +149,12 @@ function serveStatic(req, res, url) {
   const abs = path.join(PUBLIC, path.normalize(p));
   if (!abs.startsWith(PUBLIC + path.sep) || !exists(abs) || fs.statSync(abs).isDirectory()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' });
   // no-cache = the app asks again every time (cheap on this device), so a page that was updated is never shown from an old copy
-  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': p.startsWith('/fonts/') ? 'public, max-age=31536000, immutable' : 'no-cache' });
+  const base = path.basename(abs);
+  if ((base.endsWith('.html') || /^(support|vsync|noteed)\.js$/.test(base)) && themeOf(req) === 'light') {
+    // light mode: the same page with its colours mapped (the file on disk is not changed)
+    return send(res, 200, themedFile(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'text/plain', 'Cache-Control': 'no-cache', 'Vary': 'Cookie' });
+  }
+  send(res, 200, fs.readFileSync(abs), { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': p.startsWith('/fonts/') ? 'public, max-age=31536000, immutable' : 'no-cache', ...(base.endsWith('.html') || /^(support|vsync|noteed)\.js$/.test(base) ? { 'Vary': 'Cookie' } : {}) });
 }
 
 // Optional idle stop (phone): IDLE_EXIT_MIN in .env. The server exits after that many minutes with no request at all.
