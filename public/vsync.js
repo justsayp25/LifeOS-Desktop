@@ -201,7 +201,9 @@
 
   // ---------- Home: the Health summary on the stack (steps today, lifts and cardio this week) ----------
   function homeHealth(inst) {
-    const load = () => Promise.all([V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/train/summary?weeks=4').catch(() => null)]).then(([p, t]) => {
+    const load = () => Promise.all([V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/train/summary?weeks=4').catch(() => null), V.get('/api/habits?from=' + shift(-126) + '&to=' + today()).catch(() => null)]).then(([p, t, hb]) => {
+      const hgd = {}; if (hb && hb.days) Object.keys(hb.days).forEach((k) => { hgd[k] = Object.keys(hb.days[k]).filter((n) => hb.days[k][n]).length; });
+      apply(inst, { hgd });
       const now = new Date(); const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const row = p && (p.days || []).filter((d) => d.date === today)[0];
       apply(inst, { hh: { steps: row && row.steps != null ? row.steps : null, lifts: t && t.thisWeek ? t.thisWeek.lifts : null, cardio: t && t.thisWeek ? t.thisWeek.cardio : null } });
