@@ -199,6 +199,16 @@
     load(); poller(load, 30000);
   }
 
+  // ---------- Home: the Health summary on the stack (steps today, lifts and cardio this week) ----------
+  function homeHealth(inst) {
+    const load = () => Promise.all([V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/train/summary?weeks=4').catch(() => null)]).then(([p, t]) => {
+      const now = new Date(); const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const row = p && (p.days || []).filter((d) => d.date === today)[0];
+      apply(inst, { hh: { steps: row && row.steps != null ? row.steps : null, lifts: t && t.thisWeek ? t.thisWeek.lifts : null, cardio: t && t.thisWeek ? t.thisWeek.cardio : null } });
+    }).catch(() => {});
+    load(); poller(load, 60000);
+  }
+
   // ---------- health trackers ----------
   function healthLogs(inst) {
     const load = () => V.get('/api/healthlog').then((j) => apply(inst, { hLifts: j.lifts, hRoutines: j.routines || [], hExercises: j.exercises || [], hMeasures: j.measures || [], hSprints: j.sprints || [], hEntries: { runs: j.runs, pt: j.pt, rec: j.rec } })).catch(() => {});
@@ -449,6 +459,7 @@
     if (HOME.indexOf(page) >= 0) { tasks(inst); events(inst); daily(inst); if (page === 'Projects') projects(inst); else projCount(inst); }
     if (page === 'Finances') finance(inst);
     if (page === 'Mma') mmaLog(inst);
+    if (page === 'Main') homeHealth(inst);
     if (page === 'Spiritual') spiritual(inst);
     if (page === 'Health') healthLogs(inst);
     if (LIB[page]) library(inst, LIB[page]);
