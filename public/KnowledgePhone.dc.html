@@ -255,6 +255,7 @@
 <script type="text/x-dc" data-dc-script data-props='{"hour12":{"editor":"boolean","default":true},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   componentDidMount() {
+    try { const qq = new URLSearchParams(location.search).get('q'); if (qq) this.setState({ libQ: qq }); } catch (e) {}
     try { const q = new URLSearchParams(location.search).get('sec'); if (q && ['Journal', 'College', 'Languages', 'Self-Study', 'Resources', 'People', 'Places'].indexOf(q) >= 0) this.setState({ libSec: q, libTopic: '', libNote: '', libView: 'list' }); } catch (e) {}
     // island: slide the active pill from the previous section to this one
     try {

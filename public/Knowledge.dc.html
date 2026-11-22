@@ -516,6 +516,10 @@ class Component extends DCLogic {
     }
   }
   kgZoomBtn(f) { const G = this._kg; if (G && G.w) this.kgZoomAt(G.w / 2, G.h / 2, f); }
+  componentDidMount() {
+    try { const qq = new URLSearchParams(location.search).get('q'); if (qq) this.setState({ libQ: qq }); } catch (e) {}
+  }
+
   renderVals() {
     const s = this.state || {};
 

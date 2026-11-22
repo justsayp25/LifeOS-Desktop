@@ -368,26 +368,106 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
 })();
 
-// The gear (top right of every phone page). In the LifeOS app it opens the app menu (sync, health, auto-sync, theme, reload),
-// which replaces the old floating triple dot; in a browser it switches Light / Dark.
+// Pinned Search and Settings buttons (top right of every phone page) and their two sheets.
+// Settings: Theme, Sync vault, Auto-sync, Update health data (the health update runs in the LifeOS app when there is one).
+// Search: looks through the vault notes and opens the match in Knowledge.
 (function () {
   'use strict';
   const inApp = () => window.__LIFEOS_APP === 'android' && window.ReactNativeWebView;
-  const press = () => {
-    try { if (inApp()) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'menu' })); return; } } catch (e) {}
-    try { window.lifeosTheme && window.lifeosTheme.toggle(); } catch (e) {}
+  const toApp = (o) => { try { window.ReactNativeWebView.postMessage(JSON.stringify(o)); return true; } catch (e) { return false; } };
+  const V = () => window.vault;
+  const GLASS = 'background:rgba(24,24,24,0.94);-webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);border:1px solid rgba(255,255,255,0.14);box-shadow:inset 0 1px 0 rgba(255,255,255,0.22),0 16px 40px rgba(0,0,0,0.5);';
+  const SG = "font-family:'Space Grotesk',sans-serif;font-weight:600;";
+  const ago = (t) => { if (!t) return 'never'; const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  const el = (tag, css, html) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; };
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let open = null;
+  const close = () => { if (open) { try { open.remove(); } catch (e) {} open = null; } };
+  const shell = (title, body) => {
+    close();
+    const wrap = el('div', 'position:fixed;inset:0;z-index:70;');
+    const scrim = el('button', 'position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;background:rgba(0,0,0,0.35);cursor:default;');
+    scrim.type = 'button'; scrim.setAttribute('aria-label', 'Close'); scrim.addEventListener('click', close);
+    const sheet = el('div', 'position:absolute;left:50%;transform:translateX(-50%);width:min(430px,calc(100% - 24px));top:52px;max-height:calc(100% - 150px);overflow-y:auto;box-sizing:border-box;padding:14px 18px 10px;border-radius:28px;' + GLASS);
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', title);
+    const head = el('div', 'display:flex;align-items:center;justify-content:space-between;padding:6px 0 10px;');
+    head.appendChild(el('span', SG + 'font-size:22px;color:#F5F5F5;', esc(title)));
+    const x = el('button', 'width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#222;border:1px solid #333;color:#F5F5F5;cursor:pointer;', '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>');
+    x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.addEventListener('click', close); head.appendChild(x);
+    sheet.appendChild(head); sheet.appendChild(body); wrap.appendChild(scrim); wrap.appendChild(sheet); document.body.appendChild(wrap); open = wrap;
+    return wrap;
   };
-  window.lifeosGear = press;
-  const GEAR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+  const row = (label, sub, ctl, first) => {
+    const r = el('div', 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;' + (first ? '' : 'border-top:1px solid #262626;'));
+    const l = el('div', 'min-width:0;flex:1;');
+    l.appendChild(el('div', 'font-size:15.5px;color:#F5F5F5;', esc(label)));
+    const sb = el('div', 'font-size:12.5px;color:#8A8A8A;margin-top:3px;', esc(sub)); l.appendChild(sb);
+    r.appendChild(l); if (ctl) r.appendChild(ctl);
+    return { r, sub: sb };
+  };
+  const pill = (txt, fn) => { const b = el('button', 'height:40px;padding:0 16px;border-radius:999px;background:#222;border:1px solid #3A3A3A;color:#F5F5F5;font-size:14px;cursor:pointer;white-space:nowrap;', esc(txt)); b.type = 'button'; b.addEventListener('click', fn); return b; };
+  const settings = () => {
+    const body = el('div', '');
+    // theme
+    const seg = el('div', 'display:flex;gap:2px;padding:3px;border-radius:999px;background:#222;border:1px solid #333;');
+    const cur = window.lifeosTheme ? window.lifeosTheme.get() : 'dark';
+    [['dark', 'Dark'], ['light', 'Light']].forEach(([k, t]) => { const b = el('button', 'height:34px;padding:0 16px;border:0;border-radius:999px;cursor:pointer;font-size:14px;font-weight:500;background:' + (cur === k ? '#EDEDED' : 'transparent') + ';color:' + (cur === k ? '#121212' : '#D5D5D5') + ';', t); b.type = 'button'; b.addEventListener('click', () => { if (window.lifeosTheme && window.lifeosTheme.get() !== k) window.lifeosTheme.set(k); }); seg.appendChild(b); });
+    body.appendChild(row('Theme', 'Dark or light on every page', seg, true).r);
+    // sync
+    const syncB = pill('Sync now', async () => { syncB.textContent = 'Syncing…'; syncB.disabled = true; try { const j = await V().post('/api/gitsync/run', {}); syncR.sub.textContent = j && j.ok ? 'Synced just now' + (j.conflicts && j.conflicts.length ? ' · ' + j.conflicts.length + ' kept twice' : '') : ((j && j.error) || 'Sync failed'); } catch (e) { syncR.sub.textContent = (e && e.message) || 'Sync failed'; } syncB.textContent = 'Sync now'; syncB.disabled = false; });
+    const syncR = row('Sync vault', 'Last sync …', syncB); body.appendChild(syncR.r);
+    // auto-sync
+    const tg = el('button', 'position:relative;width:52px;height:30px;padding:0;border-radius:15px;border:1px solid #3A3A3A;background:#222;cursor:pointer;flex:0 0 auto;');
+    tg.type = 'button'; tg.setAttribute('role', 'switch'); tg.setAttribute('aria-label', 'Auto-sync');
+    const knob = el('span', 'position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#F5F5F5;transition:left .15s;'); tg.appendChild(knob);
+    const paint = (on) => { tg.setAttribute('aria-checked', on ? 'true' : 'false'); tg.style.background = on ? '#EDEDED' : '#222'; knob.style.left = on ? '25px' : '3px'; knob.style.background = on ? '#121212' : '#F5F5F5'; };
+    paint(false);
+    tg.addEventListener('click', async () => { const on = tg.getAttribute('aria-checked') !== 'true'; paint(on); try { const j = await V().post('/api/autosync', { on }); paint(!!(j && j.on)); } catch (e) { paint(!on); } });
+    body.appendChild(row('Auto-sync', 'Saves and checks GitHub by itself', tg).r);
+    // health
+    const at = () => { try { return Number(localStorage.getItem('lifeos.healthAt')) || 0; } catch (e) { return 0; } };
+    const hB = pill('Update', async () => { hB.textContent = 'Updating…'; hB.disabled = true; if (inApp()) { toApp({ type: 'health' }); } else { try { const j = await V().post('/api/gymimport/run', {}); window.lifeosApp.onHealth((j && j.summary) || 'GymMane updated'); } catch (e) { window.lifeosApp.onHealth('error: ' + ((e && e.message) || 'failed')); } } });
+    const hR = row('Update health data', 'Samsung Health and GymMane · ' + ago(at()), hB); body.appendChild(hR.r);
+    window.lifeosApp = { onHealth: (text) => { try { if (!/^error/.test(text)) localStorage.setItem('lifeos.healthAt', String(Date.now())); } catch (e) {} hB.textContent = 'Update'; hB.disabled = false; hR.sub.textContent = String(text).split('\n')[0].slice(0, 90) + ' · ' + ago(at()); } };
+    // reload + setup
+    const rl = row('Reload page', 'Fetch the page again', pill('Reload', () => location.reload())); body.appendChild(rl.r);
+    if (inApp()) body.appendChild(row('App setup', 'Termux and start script', pill('Open', () => { close(); toApp({ type: 'setup' }); })).r);
+    shell('Settings', body);
+    // live values
+    V().get('/api/autosync').then((j) => paint(!!(j && j.on))).catch(() => {});
+    V().get('/api/gitsync/status').then((j) => { const t = j && j.last && j.last.at ? Date.parse(j.last.at) : 0; syncR.sub.textContent = 'Last sync ' + ago(t); }).catch(() => { syncR.sub.textContent = 'Sync is not set up on this device'; });
+  };
+  const search = () => {
+    const body = el('div', '');
+    const inp = el('input', 'width:100%;height:46px;box-sizing:border-box;padding:0 14px;border-radius:12px;background:#222;border:1px solid #333;color:#F5F5F5;font-size:15px;');
+    inp.type = 'text'; inp.placeholder = 'Search your notes'; inp.setAttribute('aria-label', 'Search your notes');
+    const list = el('div', 'padding-top:6px;');
+    body.appendChild(inp); body.appendChild(list);
+    shell('Search', body);
+    let t = null, n = 0;
+    const draw = (res, q) => {
+      list.innerHTML = '';
+      if (!res.length) { list.appendChild(el('div', 'padding:16px 2px;font-size:13.5px;color:#8A8A8A;', q.length < 2 ? 'Type at least two letters.' : 'Nothing found.')); return; }
+      res.forEach((r) => { const b = el('button', 'display:block;width:100%;text-align:left;padding:11px 2px;background:none;border:0;border-top:1px solid #262626;cursor:pointer;color:inherit;');
+        b.type = 'button'; b.innerHTML = '<div style="font-size:15px;color:#F5F5F5;">' + esc(r.title) + '</div><div style="font-size:12px;color:#8A8A8A;margin-top:2px;">' + esc(r.folder || '') + (r.snippet ? ' · ' + esc(r.snippet).slice(0, 90) : '') + '</div>';
+        b.addEventListener('click', () => { location.href = (/Phone\.dc\.html$/.test(location.pathname) ? '/KnowledgePhone.dc.html?view=phone&q=' : '/Knowledge.dc.html?q=') + encodeURIComponent(r.title); }); list.appendChild(b); });
+    };
+    inp.addEventListener('input', () => { clearTimeout(t); const q = inp.value.trim(); const k = ++n; t = setTimeout(async () => { if (q.length < 2) { draw([], q); return; } try { const j = await V().get('/api/search?q=' + encodeURIComponent(q)); if (k === n) draw((j && j.results) || [], q); } catch (e) { if (k === n) draw([], q); } }, 250); });
+    draw([], ''); setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
+  };
+  window.lifeosGear = settings; window.lifeosSearch = search;
+  const ICON = {
+    gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>',
+    search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' };
+  const pin = (kind, right, fn, label) => {
+    const b = el('button', 'position:fixed;top:20px;right:' + right + 'px;z-index:35;width:36px;height:36px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;', ICON[kind]);
+    b.type = 'button'; b.setAttribute('data-lifeos-' + kind, '1'); b.setAttribute('aria-label', label); b.addEventListener('click', fn); document.body.appendChild(b);
+  };
   const add = () => {
     try {
-      if (document.querySelector('[data-lifeos-gear]')) return;
-      if (!/[A-Za-z]Phone\.dc\.html$/.test(location.pathname)) return; // phone pages only (their file names end in Phone)
-      const b = document.createElement('button');
-      b.type = 'button'; b.setAttribute('data-lifeos-gear', '1'); b.setAttribute('aria-label', 'Settings'); b.innerHTML = GEAR;
-      b.style.cssText = 'position:fixed;top:20px;right:16px;z-index:35;width:36px;height:36px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;';
-      b.addEventListener('click', press);
-      document.body.appendChild(b);
+      if (!/[A-Za-z]Phone\.dc\.html$/.test(location.pathname)) return;
+      if (!document.querySelector('[data-lifeos-gear]')) pin('gear', 16, settings, 'Settings');
+      if (!document.querySelector('[data-lifeos-search]')) pin('search', 60, search, 'Search');
     } catch (e) {}
   };
   const later = () => { add(); setTimeout(add, 800); setTimeout(add, 2500); };
