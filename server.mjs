@@ -24,6 +24,7 @@ import { getDaily, setDaily, listEvents, createEvent, deleteEvent } from './lib/
 import { listProjects, createProject, patchProject, binProject } from './lib/projects.mjs';
 import { listEntries, addEntry, removeEntry } from './lib/finance.mjs';
 import { listHealth, addHealth, removeHealth } from './lib/healthlogs.mjs';
+import { getSpiritual, addChapter, removeChapter, setPlan, addVerse } from './lib/spiritual.mjs';
 import { listMma, mmaWeeks, addMma, removeMma } from './lib/mma.mjs';
 import { listAreas, search, resolve } from './lib/areas.mjs';
 import { listLibrary, createNote, updateNote, binNote, attachFile, detachFile, readAttachment } from './lib/library.mjs';
@@ -142,6 +143,13 @@ async function api(req, res, url) {
   if (p === '/api/mma' && m === 'POST') return json(res, 200, addMma(await readBody(req)));
   r = p.match(/^\/api\/mma\/([^/]+)$/);
   if (r && m === 'DELETE') return json(res, 200, removeMma(decodeURIComponent(r[1])));
+  // Spiritual tracker (Prayer and Meditation come from the daily-note habits)
+  if (p === '/api/spiritual' && m === 'GET') return json(res, 200, getSpiritual(Number(q.get('days')) || 28));
+  if (p === '/api/spiritual/read' && m === 'POST') return json(res, 200, addChapter(await readBody(req)));
+  if (p === '/api/spiritual/plan' && m === 'POST') return json(res, 200, setPlan(await readBody(req)));
+  if (p === '/api/spiritual/memorize' && m === 'POST') return json(res, 200, addVerse(await readBody(req)));
+  r = p.match(/^\/api\/spiritual\/read\/([^/]+)$/);
+  if (r && m === 'DELETE') return json(res, 200, removeChapter(decodeURIComponent(r[1])));
   // library notes
   if (p === '/api/areas' && m === 'GET') return json(res, 200, listAreas());
   if (p === '/api/resolve' && m === 'GET') return json(res, 200, resolve(q.get('name')));
