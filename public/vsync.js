@@ -172,12 +172,30 @@
 
   // ---------- finances ----------
   function finance(inst) {
-    const load = () => V.get('/api/finance').then((j) => apply(inst, { fEntries: j.entries })).catch(() => {});
+    const load = () => V.get('/api/finance').then((j) => apply(inst, { fEntries: j.entries, fBudget: j.budget })).catch(() => {});
     inst._vhooks.push((p, n) => {
       const pe = byId(p.fEntries), ne = byId(n.fEntries);
-      (n.fEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('fin', () => V.post('/api/finance', { asset: e.asset, kind: e.kind, amt: e.amt, date: e.date }).catch((x) => fail(x)))).then(load); });
+      (n.fEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('fin', () => V.post('/api/finance', { asset: e.asset, kind: e.kind, amt: e.amt, date: e.date, cat: e.cat, note: e.note }).catch((x) => fail(x)))).then(load); });
       (p.fEntries || []).forEach((e) => { if (ne[e.id] || isTemp(e.id)) return; track(enqueue('fin', () => V.del('/api/finance/' + encodeURIComponent(e.id)).catch((x) => fail(x)))).then(load); });
     });
+    load(); poller(load, 30000);
+  }
+
+  // ---------- MMA training log ----------
+  function mmaLog(inst) {
+    const load = () => V.get('/api/mma').then((j) => apply(inst, { mEntries: j.entries, mStyles: j.styles })).catch(() => {});
+    inst._vhooks.push((p, n) => {
+      const pe = byId(p.mEntries), ne = byId(n.mEntries);
+      (n.mEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('mma', () => V.post('/api/mma', { style: e.style, min: e.min, rpe: e.rpe, notes: e.notes, date: e.date }).catch((x) => fail(x)))).then(load); });
+      (p.mEntries || []).forEach((e) => { if (ne[e.id] || isTemp(e.id)) return; track(enqueue('mma', () => V.del('/api/mma/' + encodeURIComponent(e.id)).catch((x) => fail(x)))).then(load); });
+    });
+    load(); poller(load, 30000);
+  }
+
+  // ---------- Spiritual tracker (prayer and meditation are the daily-note habits; chapters and verses live in 06 Spiritual/Tracker) ----------
+  function spiritual(inst) {
+    const load = () => V.get('/api/spiritual').then((j) => apply(inst, { spData: j })).catch(() => {});
+    inst._spAct = (method, path, body) => { track(enqueue('spirit', () => (method === 'DELETE' ? V.del(path) : V.post(path, body || {})).catch((x) => fail(x)))).then(load); };
     load(); poller(load, 30000);
   }
 
@@ -430,6 +448,8 @@
     inst._vhooks = [];
     if (HOME.indexOf(page) >= 0) { tasks(inst); events(inst); daily(inst); if (page === 'Projects') projects(inst); else projCount(inst); }
     if (page === 'Finances') finance(inst);
+    if (page === 'Mma') mmaLog(inst);
+    if (page === 'Spiritual') spiritual(inst);
     if (page === 'Health') healthLogs(inst);
     if (LIB[page]) library(inst, LIB[page]);
     if (page === 'Areas') areas(inst);
