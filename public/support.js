@@ -473,3 +473,36 @@
   const later = () => { add(); setTimeout(add, 800); setTimeout(add, 2500); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', later); else later();
 })();
+
+// Island long-press menu: a long press on Home / Areas / Knowledge opens a menu under the finger.
+// Lifting the finger over an item opens it; lifting anywhere else leaves the menu open (the release
+// no longer closes it), so one gesture is enough. The release event goes to the element that was
+// touched first (the page may have re-drawn it by then), so the listener is put on that element.
+(function () {
+  'use strict';
+  let swallowUntil = 0;
+  const menuEl = () => document.querySelector('nav[aria-label="HOME"],nav[aria-label="AREAS"],nav[aria-label="KNOWLEDGE"]');
+  document.addEventListener('touchstart', (e) => {
+    try {
+      if (menuEl()) return;
+      const tgt = e.target;
+      if (!tgt || !tgt.addEventListener) return;
+      const done = (ev) => {
+        try {
+          const m = menuEl();
+          if (!m) return;
+          const t = ev.changedTouches && ev.changedTouches[0];
+          swallowUntil = Date.now() + 700;
+          if (ev.type === 'touchend' && t) {
+            const el = document.elementFromPoint(t.clientX, t.clientY);
+            const a = el && el.closest && el.closest('a[href]');
+            if (a && m.contains(a)) { if (ev.cancelable) ev.preventDefault(); location.href = a.getAttribute('href'); }
+          }
+        } catch (err) {}
+      };
+      tgt.addEventListener('touchend', done, { once: true, capture: true });
+      tgt.addEventListener('touchcancel', () => {}, { once: true });
+    } catch (err) {}
+  }, true);
+  document.addEventListener('click', (e) => { if (Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
