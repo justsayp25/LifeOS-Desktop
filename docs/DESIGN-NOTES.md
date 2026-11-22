@@ -37,8 +37,12 @@ Gauge tiles grouped by status (Active, On hold, Done), tabs `ALL · ACTIVE · ON
 - **Tasks pages:** the priority is a coloured dot, without the word.
 - **Work** is removed from the sidebars, the Areas menu and the Areas page.
 
-## Not merged yet (still design only)
-Projects (gauge tiles and status tabs), the Calendar page restyle, the Areas swipe stack with graphs, the shared desktop top bar, and the pinned search and settings buttons on the other pages. These carry real project, calendar and area logic, so each needs its own careful port.
+- **Projects** (v1.9.65): two-column gauge tiles (status, last-log date, done/total gauge, name, open count), dimmed on hold and done; detail view unchanged.
+- **Areas** (v1.9.66): one looping swipe stack with a graph per area (Health rings, MMA weekly minutes, Spiritual 28-day ring, Finances donut), all from the real trackers.
+- **Calendar** (v1.9.67): borderless day cells with a white pill on the selected day.
+
+## Not merged yet (design only)
+The shared desktop top bar with the hamburger, the pinned round search and settings buttons on every page (Home has its own header buttons), and the settings sheet.
 
 ## Open
 - Bible app package name (placeholder `com.lifeos.bible`).
