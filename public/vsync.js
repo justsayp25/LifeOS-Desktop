@@ -209,6 +209,15 @@
     load(); poller(load, 60000);
   }
 
+  // ---------- Areas: the graphs on the swipe stack ----------
+  function areasStack(inst) {
+    const load = () => Promise.all([V.get('/api/train/summary?weeks=4').catch(() => null), V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/mma?weeks=12').catch(() => null), V.get('/api/spiritual?days=28').catch(() => null), V.get('/api/finance').catch(() => null)]).then(([t, p, m, sp, f]) => {
+      const row = p && (p.days || []).filter((d) => d.date === today())[0];
+      apply(inst, { azd: { train: t, steps: row && row.steps != null ? row.steps : 0, mma: m, spi: sp, fin: f } });
+    }).catch(() => {});
+    load(); poller(load, 60000);
+  }
+
   // ---------- health trackers ----------
   function healthLogs(inst) {
     const load = () => V.get('/api/healthlog').then((j) => apply(inst, { hLifts: j.lifts, hRoutines: j.routines || [], hExercises: j.exercises || [], hMeasures: j.measures || [], hSprints: j.sprints || [], hEntries: { runs: j.runs, pt: j.pt, rec: j.rec } })).catch(() => {});
@@ -464,6 +473,7 @@
     if (page === 'Health') healthLogs(inst);
     if (LIB[page]) library(inst, LIB[page]);
     if (page === 'Areas') areas(inst);
+    if (page === 'Areas') areasStack(inst);
     if (page === 'Projects') pfields(inst);
   }
   const wait = (n) => { if (window.__dc) return V.ready.then((on) => { if (on) attach(window.__dc); }); if (n > 200) return; setTimeout(() => wait(n + 1), 25); };
