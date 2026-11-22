@@ -32,8 +32,13 @@ Gauge tiles grouped by status (Active, On hold, Done), tabs `ALL · ACTIVE · ON
 - Spiritual: Prayer and Meditation are the `## Habits` checkboxes of the daily notes (never copied). Scripture, `1 Human/06 Spiritual/Tracker/Reading/Reading.md`: `## Plan` `- book: John, chapters: 21`; `## Log` `- 2026-11-22 -- chapter: John 7`. Verse, `Tracker/Memorize/Memorize.md`, `## Verses`: `- 2026-11-22 -- John 15:5 -- the verse text` (newest line shown).
 - Routes: `/api/finance` (cat, note, budget), `/api/mma`, `/api/spiritual` (plus `/read`, `/plan`, `/memorize`), `/api/habits`.
 
+## Merged later (v1.9.60 to v1.9.64)
+- **Home, phone and desktop:** header `Sun` + `Nov 22` with round Search (opens Knowledge) and, on the phone, the theme button; the calendar with dots (phone week strip); stack one: Today (next event, open tasks with a priority dot, + to add) | Habits | Capture | Reflect; stack two: Overview | Quick links (round icons) | Health (steps today, lifts and cardio this week). The clock and the Focus line are gone.
+- **Tasks pages:** the priority is a coloured dot, without the word.
+- **Work** is removed from the sidebars, the Areas menu and the Areas page.
+
 ## Not merged yet (still design only)
-Home, Tasks, Calendar, Projects, Areas stack, the shared desktop shell (sidebar without Work), pinned search and settings buttons, the (-)/(+) buttons on desktop use fixed positions. The real pages still show Work in the sidebar. Needs Jess's go for each: they carry the real task, calendar, project and agent logic.
+Projects (gauge tiles and status tabs), the Calendar page restyle, the Areas swipe stack with graphs, the shared desktop top bar, and the pinned search and settings buttons on the other pages. These carry real project, calendar and area logic, so each needs its own careful port.
 
 ## Open
 - Bible app package name (placeholder `com.lifeos.bible`).
