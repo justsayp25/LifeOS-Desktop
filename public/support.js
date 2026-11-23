@@ -142,13 +142,38 @@
     const field = (label, el) => { const l = mk('label', LAB); l.textContent = label; box.appendChild(l); box.appendChild(el); return el; };
     box.appendChild(head);
     const title = field('TITLE', mk('input', FIELD, { type: 'text', 'aria-label': 'Task title', maxlength: '300' })); title.value = t.title || '';
-    const due = field('DUE DATE', mk('input', FIELD, { type: 'date', 'aria-label': 'Due date' })); due.value = t.dueKey || '';
-    const time = field('TIME (needs a due date)', mk('input', FIELD, { type: 'time', 'aria-label': 'Time' })); time.value = t.time || '';
-    const sel = (opts, cur, label) => { const s2 = mk('select', FIELD, { 'aria-label': label }); opts.forEach(([v, n]) => { const o = mk('option'); o.value = v; o.textContent = n; if (v === cur) o.selected = true; s2.appendChild(o); }); return s2; };
-    const pri = field('PRIORITY', sel([['', 'None'], ['Low', 'Low'], ['Medium', 'Medium'], ['High', 'High']], t.priority || '', 'Priority'));
-    const rep = field('REPEAT', sel([['', 'Never'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']], t.repeat || '', 'Repeat'));
+    const IC = {
+      cal: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>',
+      clk: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>'
+    };
+    const fmtDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v.slice(5, 7) + '/' + v.slice(8, 10) + '/' + v.slice(0, 4) : v);
+    const fmtTime = (v) => { const m = /^(\d{1,2}):(\d{2})/.exec(v || ''); if (!m) return v; const h = +m[1]; return (h % 12 || 12) + ':' + m[2] + ' ' + (h >= 12 ? 'PM' : 'AM'); };
+    // a row that looks like a button; the real date or time input sits invisibly over it, so tapping opens the phone's own picker
+    const pickRow = (ico, kind, aria, init, fmt, ph) => {
+      const w = mk('div', 'position:relative;height:44px;box-sizing:border-box;border-radius:12px;background:#222;border:1px solid #333;display:flex;align-items:center;gap:8px;padding:0 12px;font-size:15px;margin-top:8px;');
+      w.innerHTML = ico; const lab = mk('span'); w.appendChild(lab);
+      const inp = mk('input', 'position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:0;background:none;color-scheme:dark;', { type: kind, 'aria-label': aria });
+      inp.value = init || ''; w.appendChild(inp);
+      const paint = () => { lab.textContent = inp.value ? fmt(inp.value) : ph; w.style.color = inp.value ? '#F5F5F5' : '#8A8A8A'; };
+      inp.addEventListener('input', paint); inp.addEventListener('change', paint); paint(); box.appendChild(w); return inp;
+    };
+    const due = pickRow(IC.cal, 'date', 'Due date', t.dueKey || '', fmtDate, 'Due date');
+    const time = pickRow(IC.clk, 'time', 'Time', t.time || '', fmtTime, 'Time');
+    const PRI = { Low: '#7FA88A', Medium: '#D9A441', High: '#E07070' };
+    let pri = t.priority || '', rep = t.repeat || '', proj = t.project || '';
+    const seg = mk('div', 'display:flex;gap:4px;padding:3px;border-radius:12px;background:#222;border:1px solid #333;margin-top:8px;');
+    const paintPri = () => { seg.innerHTML = ''; ['Low', 'Medium', 'High'].forEach((n) => { const on = pri === n; const b = mk('button', 'flex:1;height:36px;padding:0 12px;border:0;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:13px;font-weight:500;background:' + (on ? '#2E2E2E' : 'transparent') + ';color:' + (on ? '#F5F5F5' : '#B5B5B5') + ';', { type: 'button', 'aria-pressed': on ? 'true' : 'false' }); const d = mk('span', 'width:7px;height:7px;border-radius:50%;background:' + PRI[n] + ';'); b.appendChild(d); b.appendChild(document.createTextNode(n)); b.onclick = () => { pri = pri === n ? '' : n; paintPri(); }; seg.appendChild(b); }); };
+    paintPri(); box.appendChild(seg);
+    const chipRow = (label, opts, get, set) => {
+      const l = mk('span', LAB); l.textContent = label; box.appendChild(l);
+      const r = mk('div', 'display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;');
+      const paint = () => { r.innerHTML = ''; opts.forEach(([v, n]) => { const on = get() === v; const b = mk('button', 'flex:0 0 auto;height:40px;padding:0 14px;border-radius:999px;cursor:pointer;font:inherit;font-size:13px;white-space:nowrap;background:' + (on ? '#2E2E2E' : 'transparent') + ';color:' + (on ? '#F5F5F5' : '#B5B5B5') + ';border:1px solid ' + (on ? '#6A6A6A' : '#333') + ';', { type: 'button', 'aria-pressed': on ? 'true' : 'false' }); b.textContent = n; b.onclick = () => { set(get() === v ? '' : v); paint(); }; r.appendChild(b); }); };
+      paint(); box.appendChild(r);
+    };
     let names = []; try { names = ((await vault.get('/api/projects')).projects || []).map((p) => p.name).filter(Boolean); } catch (e) {}
-    const proj = field('PROJECT', sel([['', 'None']].concat(names.map((n) => [n, n])), t.project || '', 'Project'));
+    if (proj && names.indexOf(proj) < 0) names.push(proj);
+    chipRow('PROJECT', names.map((n) => [n, n]), () => proj, (v) => { proj = v; });
+    chipRow('REPEAT', [['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']], () => rep, (v) => { rep = v; });
     const err = mk('div', 'min-height:18px;margin-top:10px;font-size:13px;color:#E08A82;', { role: 'alert' });
     const row = mk('div', 'display:flex;gap:10px;margin-top:8px;');
     const save = mk('button', 'flex:1;min-height:48px;border:0;border-radius:999px;background:#F5F5F5;color:#121212;font:inherit;font-size:15px;font-weight:700;cursor:pointer;', { type: 'button' }); save.textContent = 'Save';
@@ -163,7 +188,7 @@
       if (!title.value.trim()) { err.textContent = 'A task needs a title.'; title.focus(); return; }
       save.disabled = true; save.style.opacity = '.55'; err.textContent = '';
       try {
-        await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(t.id), { title: title.value, dueKey: due.value, time: due.value ? time.value : '', priority: pri.value, repeat: rep.value, project: proj.value });
+        await vault.call('PATCH', '/api/tasks/' + encodeURIComponent(t.id), { title: title.value, dueKey: due.value, time: due.value ? time.value : '', priority: pri, repeat: rep, project: proj });
         close(); try { await (vault.reloadTasks && vault.reloadTasks()); } catch (e) {}
       } catch (e) { err.textContent = (e && e.message) || "That didn't save."; save.disabled = false; save.style.opacity = ''; }
     };
