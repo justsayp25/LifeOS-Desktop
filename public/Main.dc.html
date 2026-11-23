@@ -802,9 +802,11 @@ class Component extends DCLogic {
     const nextOverdue = !!nextTask && !!nextTask.dueKey && nextTask.dueKey < todayKey;
     const nextText = nextTask ? nextTask.title + (nextTask.dueKey ? ' · ' + nextTask.dueKey.slice(5, 7) + '/' + nextTask.dueKey.slice(8, 10) : '') : 'Nothing queued';
     const events = s.events || [];
-    const nextEv = events.filter((e) => new Date(e.start) > now).sort((a, b) => new Date(a.start) - new Date(b.start))[0];
+    const evKey = (e) => e.date + 'T' + (e.allDay || !e.start ? '23:59' : ('0' + e.start).slice(-5));
+    const evAt = (e) => new Date(evKey(e) + ':00');
+    const nextEv = events.filter((e) => evAt(e) > now).sort((a, b) => evAt(a) - evAt(b))[0];
     const sched = nextEv
-      ? { isSched: true, label: nextEv.title, value: (() => { const d = new Date(nextEv.start); const h = d.getHours(); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + pad(d.getMinutes()); })() }
+      ? { isSched: true, label: nextEv.title, value: (() => { if (nextEv.allDay || !nextEv.start) return 'All day'; const h = +nextEv.start.slice(0, 2); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + nextEv.start.slice(3, 5); })() }
       : { isSched: true, label: 'Schedule', value: '—' };
     const overview = [
       { label: 'Today', value: String(openTasks.filter((t) => t.dueKey === todayKey).length) },
@@ -815,7 +817,7 @@ class Component extends DCLogic {
 
     // ---- redesigned Home (desktop): header, Today list, stacks ----
     const hmTime = (d) => { const h = d.getHours(); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + pad(d.getMinutes()); };
-    const evToday = events.map((e) => ({ e, d: new Date(e.start) })).filter((x) => !isNaN(x.d) && x.d > now && ymdL(x.d) === todayKey).sort((a, b) => a.d - b.d);
+    const evToday = events.filter((e) => !e.allDay && e.start && e.date === todayKey).map((e) => ({ e, d: evAt(e) })).filter((x) => x.d > now).sort((a, b) => a.d - b.d);
     const evNext = evToday[0], evThen = evToday[1];
     const evMin = evNext ? Math.max(0, Math.round((evNext.d - now) / 60000)) : 0;
     const todayEv = { has: !!evNext, time: evNext ? hmTime(evNext.d) : '', title: evNext ? evNext.e.title : '', then: evThen ? 'then ' + evThen.e.title + ' at ' + hmTime(evThen.d) : '', in: evNext ? (evMin >= 60 ? 'in ' + Math.round(evMin / 60) + ' h' : 'in ' + evMin + ' min') : '' };
