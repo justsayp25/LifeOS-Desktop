@@ -804,8 +804,10 @@ class Component extends DCLogic {
     const events = s.events || [];
     const evKey = (e) => e.date + 'T' + (e.allDay || !e.start ? '23:59' : ('0' + e.start).slice(-5));
     const evAt = (e) => new Date(evKey(e) + ':00');
-    // Scheduled tile: how many calendar events are on today (tasks are counted by the Today tile).
-    const sched = { isSched: true, label: 'Scheduled', href: 'Calendar.dc.html', value: String(events.filter((e) => e.date === todayKey).length) };
+    // Scheduled tile: how many calendar events are still coming up in the next 7 days (a timed event that has not started yet, or an all-day event today or later). Tasks are counted by the Today and All Tasks tiles.
+    const schedEnd = new Date(now); schedEnd.setDate(schedEnd.getDate() + 7);
+    const schedEndKey = schedEnd.getFullYear() + '-' + pad(schedEnd.getMonth() + 1) + '-' + pad(schedEnd.getDate());
+    const sched = { isSched: true, label: 'Scheduled', href: 'Calendar.dc.html', value: String(events.filter((e) => e.date && e.date <= schedEndKey && evAt(e) > now).length) };
     const overview = [
       { label: 'Today', value: String(openTasks.filter((t) => t.dueKey === todayKey).length) },
       sched,
