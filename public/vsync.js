@@ -35,9 +35,13 @@
   const proto = window.DCLogic && window.DCLogic.prototype;
   if (!proto) return;
   const orig = proto.setState;
+  // when the agent panel opens, start the chat process in the background so the first question is not slow (at most every 5 minutes)
+  let warmAt = 0;
+  const warmChat = () => { const t = Date.now(); if (t - warmAt < 300000) return; warmAt = t; try { const r = V.post('/api/chat/warm', {}); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
   proto.setState = function (o, cb) {
     const prev = this.state;
     orig.call(this, o, cb);
+    try { if (this.state && this.state.chatOpen && !(prev && prev.chatOpen)) warmChat(); } catch (e) {}
     if (this._vhooks && !this._vapply) for (const h of this._vhooks) { try { h(prev, this.state); } catch (e) { console.error(e); } }
   };
   const apply = (inst, patch) => { inst._vapply = true; try { inst.setState(patch); } finally { inst._vapply = false; } };
@@ -79,6 +83,7 @@
         if (isTemp(id)) (creating[id] || Promise.resolve(null)).then(go); else go(id);
       });
     });
+    V.reloadTasks = load;
     load(); poller(load, 20000);
   }
 
@@ -167,13 +172,52 @@
 
   // ---------- finances ----------
   function finance(inst) {
-    const load = () => V.get('/api/finance').then((j) => apply(inst, { fEntries: j.entries })).catch(() => {});
+    const load = () => V.get('/api/finance').then((j) => apply(inst, { fEntries: j.entries, fBudget: j.budget })).catch(() => {});
     inst._vhooks.push((p, n) => {
       const pe = byId(p.fEntries), ne = byId(n.fEntries);
-      (n.fEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('fin', () => V.post('/api/finance', { asset: e.asset, kind: e.kind, amt: e.amt, date: e.date }).catch((x) => fail(x)))).then(load); });
+      (n.fEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('fin', () => V.post('/api/finance', { asset: e.asset, kind: e.kind, amt: e.amt, date: e.date, cat: e.cat, note: e.note }).catch((x) => fail(x)))).then(load); });
       (p.fEntries || []).forEach((e) => { if (ne[e.id] || isTemp(e.id)) return; track(enqueue('fin', () => V.del('/api/finance/' + encodeURIComponent(e.id)).catch((x) => fail(x)))).then(load); });
     });
     load(); poller(load, 30000);
+  }
+
+  // ---------- MMA training log ----------
+  function mmaLog(inst) {
+    const load = () => V.get('/api/mma').then((j) => apply(inst, { mEntries: j.entries, mStyles: j.styles })).catch(() => {});
+    inst._vhooks.push((p, n) => {
+      const pe = byId(p.mEntries), ne = byId(n.mEntries);
+      (n.mEntries || []).forEach((e) => { if (pe[e.id] || !isTemp(e.id)) return; track(enqueue('mma', () => V.post('/api/mma', { style: e.style, min: e.min, rpe: e.rpe, notes: e.notes, date: e.date }).catch((x) => fail(x)))).then(load); });
+      (p.mEntries || []).forEach((e) => { if (ne[e.id] || isTemp(e.id)) return; track(enqueue('mma', () => V.del('/api/mma/' + encodeURIComponent(e.id)).catch((x) => fail(x)))).then(load); });
+    });
+    load(); poller(load, 30000);
+  }
+
+  // ---------- Spiritual tracker (prayer and meditation are the daily-note habits; chapters and verses live in 06 Spiritual/Tracker) ----------
+  function spiritual(inst) {
+    const load = () => V.get('/api/spiritual').then((j) => apply(inst, { spData: j })).catch(() => {});
+    inst._spAct = (method, path, body) => { track(enqueue('spirit', () => (method === 'DELETE' ? V.del(path) : V.post(path, body || {})).catch((x) => fail(x)))).then(load); };
+    load(); poller(load, 30000);
+  }
+
+  // ---------- Home: the Health summary on the stack (steps today, lifts and cardio this week) ----------
+  function homeHealth(inst) {
+    const load = () => Promise.all([V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/train/summary?weeks=4').catch(() => null), V.get('/api/habits?from=' + shift(-126) + '&to=' + today()).catch(() => null)]).then(([p, t, hb]) => {
+      const hgd = {}; if (hb && hb.days) Object.keys(hb.days).forEach((k) => { hgd[k] = Object.keys(hb.days[k]).filter((n) => hb.days[k][n]).length; });
+      apply(inst, { hgd });
+      const now = new Date(); const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const row = p && (p.days || []).filter((d) => d.date === today)[0];
+      apply(inst, { hh: { steps: row && row.steps != null ? row.steps : null, lifts: t && t.thisWeek ? t.thisWeek.lifts : null, cardio: t && t.thisWeek ? t.thisWeek.cardio : null } });
+    }).catch(() => {});
+    load(); poller(load, 60000);
+  }
+
+  // ---------- Areas: the graphs on the swipe stack ----------
+  function areasStack(inst) {
+    const load = () => Promise.all([V.get('/api/train/summary?weeks=4').catch(() => null), V.get('/api/health/phone?days=2').catch(() => null), V.get('/api/mma?weeks=12').catch(() => null), V.get('/api/spiritual?days=28').catch(() => null), V.get('/api/finance').catch(() => null)]).then(([t, p, m, sp, f]) => {
+      const row = p && (p.days || []).filter((d) => d.date === today())[0];
+      apply(inst, { azd: { train: t, steps: row && row.steps != null ? row.steps : 0, mma: m, spi: sp, fin: f } });
+    }).catch(() => {});
+    load(); poller(load, 60000);
   }
 
   // ---------- health trackers ----------
@@ -203,7 +247,7 @@
     const timers = {}; const created = {}; let warned = {};
     const load = () => V.get('/api/lib?domain=' + domain).then((j) => {
       const st = inst.state; const keep = (st.libNotes || []).filter((n) => isTemp(n.id));
-      apply(inst, { libNotes: j.notes.concat(keep) });
+      apply(inst, { libNotes: j.notes.concat(keep), libYears: j.years || {} });
     }).catch(() => {});
     const swapId = (from, to, extra) => {
       const notes = (inst.state.libNotes || []).map((n) => (n.id === from ? Object.assign({}, n, { id: to }, extra || {}) : n));
@@ -425,9 +469,13 @@
     inst._vhooks = [];
     if (HOME.indexOf(page) >= 0) { tasks(inst); events(inst); daily(inst); if (page === 'Projects') projects(inst); else projCount(inst); }
     if (page === 'Finances') finance(inst);
+    if (page === 'Mma') mmaLog(inst);
+    if (page === 'Main') homeHealth(inst);
+    if (page === 'Spiritual') spiritual(inst);
     if (page === 'Health') healthLogs(inst);
     if (LIB[page]) library(inst, LIB[page]);
     if (page === 'Areas') areas(inst);
+    if (page === 'Areas') areasStack(inst);
     if (page === 'Projects') pfields(inst);
   }
   const wait = (n) => { if (window.__dc) return V.ready.then((on) => { if (on) attach(window.__dc); }); if (n > 200) return; setTimeout(() => wait(n + 1), 25); };

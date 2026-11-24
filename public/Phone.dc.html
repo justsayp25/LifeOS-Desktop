@@ -9,8 +9,7 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <style>
   body { margin: 0; background: #121212; font-family: 'IBM Plex Sans', sans-serif; }
   a { color: inherit; text-decoration: none; }
@@ -43,6 +42,8 @@
   @media (hover: hover) { button:not(.lg-scrim):hover, a:hover { opacity: 0.88; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
+  .stkdots { opacity: 0; transition: opacity 0.3s; }
+  .stkdots.on { opacity: 1; }
 </style>
 </helmet>
 
@@ -73,7 +74,21 @@
         </div>
       </sc-if>
       <sc-for list="{{msgs}}" as="m" hint-placeholder-count="2">
+        <sc-if value="{{m.isBubble}}" hint-placeholder-val="{{ true }}">
         <div style="align-self: {{m.align}}; max-width: 85%; padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.45; background: {{m.bg}}; color: {{m.fg}}; white-space: pre-wrap; overflow-wrap: anywhere;">{{m.text}}</div>
+        </sc-if>
+        <sc-if value="{{m.isCard}}" hint-placeholder-val="{{ false }}">
+          <div role="group" aria-label="Proposed change" style="align-self: flex-start; max-width: 85%; box-sizing: border-box; padding: 11px 13px; border-radius: 14px; background: #1A1A1A; border: 1px solid #333; display: flex; flex-direction: column; gap: 9px;">
+            <span style="font-size: 13.5px; line-height: 1.45; color: #E6E6E6; overflow-wrap: anywhere;">{{m.label}}</span>
+            <sc-if value="{{m.pending}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 8px;">
+                <button type="button" onClick="{{m.yes}}" style="min-height: 40px; min-width: 76px; padding: 0 18px; border-radius: 999px; border: 0; background: #F5F5F5; color: #121212; font-size: 14px; font-weight: 700; cursor: pointer;">Yes</button>
+                <button type="button" onClick="{{m.no}}" style="min-height: 40px; min-width: 76px; padding: 0 18px; border-radius: 999px; background: #222222; border: 1px solid #333; color: #D0D0D0; font-size: 14px; cursor: pointer;">No</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{m.hasResult}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; color: #8A8A8A;">{{m.result}}</span></sc-if>
+          </div>
+        </sc-if>
       </sc-for>
     </div>
     <sc-if value="{{voiceNote}}" hint-placeholder-val="{{ false }}">
@@ -84,35 +99,18 @@
       <button type="button" onClick="{{toggleMic}}" aria-label="Voice input" aria-pressed="{{listening}}" style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: {{micBg}}; border: 1px solid #333; color: {{micFg}};"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
       <sc-if value="{{showSend}}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{sendMsg}}" aria-label="Send" style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #EDEDED; border: 0; color: #121212;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button></sc-if><sc-if value="{{noSend}}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{toggleTalk}}" aria-label="Conversation mode" style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #EDEDED; border: 0; color: #121212;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"></path></svg></button></sc-if>
     </div>
-  <sc-if value="{{talkOn}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: 0; right: 0; top: 57px; bottom: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; background: #1A1A1A; box-sizing: border-box;"><button type="button" onClick="{{cycleTalk}}" aria-label="{{talkAria}}" style="width: 112px; height: 112px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #000000; border: {{orbBorder}}; box-shadow: 0 0 0 8px {{orbHalo}};"><span style="width: {{orbDot}}; height: {{orbDot}}; border-radius: 50%; background: #F5F5F5;"></span></button><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 17px; color: #F5F5F5;">{{talkLabel}}</span><span style="max-width: 300px; max-height: 110px; overflow-y: auto; text-align: center; font-size: 13.5px; line-height: 1.45; color: #A8A8A8;">{{talkCaption}}</span><sc-if value="{{voiceNote}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; color: #B5B5B5; text-align: center;">{{voiceNote}}</span></sc-if><button type="button" onClick="{{cycleVoice}}" aria-label="Change voice" style="min-height: 36px; padding: 0 12px; background: none; border: 0; cursor: pointer; font-size: 12.5px; color: #8A8A8A;">Voice: {{voiceName}} · change</button><button type="button" onClick="{{endTalk}}" style="min-height: 44px; padding: 0 22px; border-radius: 999px; background: #222222; border: 1px solid #333; cursor: pointer; font-size: 14px; color: #E0E0E0;">End</button></div></sc-if></section>
+  <sc-if value="{{talkOn}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: 0; right: 0; top: 57px; bottom: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; background: #1A1A1A; box-sizing: border-box;"><button type="button" onClick="{{cycleTalk}}" aria-label="{{talkAria}}" style="width: 112px; height: 112px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #000000; border: {{orbBorder}}; box-shadow: 0 0 0 8px {{orbHalo}};"><span style="width: {{orbDot}}; height: {{orbDot}}; border-radius: 50%; background: #F5F5F5;"></span></button><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 17px; color: #F5F5F5;">{{talkLabel}}</span><span style="max-width: 300px; max-height: 110px; overflow-y: auto; text-align: center; font-size: 13.5px; line-height: 1.45; color: #A8A8A8;">{{talkCaption}}</span><sc-if value="{{voiceNote}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; color: #B5B5B5; text-align: center;">{{voiceNote}}</span></sc-if><button type="button" onClick="{{endTalk}}" style="min-height: 44px; padding: 0 22px; border-radius: 999px; background: #222222; border: 1px solid #333; cursor: pointer; font-size: 14px; color: #E0E0E0;">End</button></div></sc-if></section>
   </sc-if>
 
   <!-- BOTTOM TABS -->
   <div style="flex: 1; min-height: 0; overflow-y: auto; box-sizing: border-box; padding: 18px 16px 96px; display: flex; flex-direction: column; gap: 10px;">
-
-    <!-- CLOCK + DATE -->
-    <header style="padding: 0 2px 2px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
-     <div>
-      <div style="display: flex; align-items: baseline; gap: 8px;">
-        <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1; letter-spacing: -0.02em; color: #F5F5F5;">{{clock}}</span>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 16px; color: #8A8A8A;">{{meridiem}}</span>
-      </div>
-      <h1 style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 17px; color: #D8D8D8;">{{dateLine}}</h1>
-      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="flex: 0 0 44px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: #8A8A8A;">FOCUS</span>
-          <input type="text" aria-label="Today's focus" data-vault="daily note · focus" title="daily note · focus" placeholder="What matters most today?" value="{{focusText}}" onInput="{{onFocusText}}" style="flex: 1; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 2px; background: none; border: 0; border-bottom: 1px solid #333; border-radius: 0; color: #F5F5F5; font-size: 15px;">
-        </div>
-      </div>
-     </div>
-    </header>
-
+    <header style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;"><div style="display:flex;align-items:baseline;gap:10px;"><h1 style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:34px;line-height:1.05;letter-spacing:-0.02em;">{{hdr.dow}}</h1><span style="font-size:15px;color:#8A8A8A;">{{hdr.date}}</span></div><div style="position:fixed;top:20px;right:16px;z-index:35;display:flex;gap:8px;"><button type="button" data-lifeos-search="1" onClick="{{searchPress}}" aria-label="Search" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;padding:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button><button type="button" data-lifeos-gear="1" onClick="{{gearPress}}" aria-label="Settings" style="width:36px;height:36px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button></div></header>
     <!-- WEEK / MONTH -->
     <section style="background: #1A1A1A; border: 1px solid #292929; border-radius: 16px; padding: 4px 12px 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
         <button type="button" onClick="{{toggleCal}}" aria-expanded="{{calOpen}}" aria-label="Show or hide the full month calendar" style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 2px; background: none; border: 0; cursor: pointer;">
           <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">{{monthLabel}}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A9A9A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A9A9A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
         <sc-if value="{{calClosed}}" hint-placeholder-val="{{ true }}">
           <div style="display: flex; align-items: center;">
@@ -144,14 +142,7 @@
       </div>
 
       <sc-if value="{{calClosed}}" hint-placeholder-val="{{ true }}">
-        <div role="group" aria-label="Week" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; width: 100%;">
-          <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
-            <button type="button" onClick="{{d.pick}}" aria-pressed="{{d.sel}}" aria-label="{{d.tip}}" style="display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 50px; box-sizing: border-box; padding: 7px 0; border-radius: 12px; cursor: pointer; background: {{d.bg}}; border: {{d.ring}}; opacity: {{d.op}};">
-              <span style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; color: {{d.dowColor}};">{{d.label}}</span>
-              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500; color: {{d.numColor}};">{{d.n}}</span>
-            </button>
-          </sc-for>
-        </div>
+        <div role="group" aria-label="Week" style="display:flex;gap:2px;"><sc-for list="{{week}}" as="d" hint-placeholder-count="7"><span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;opacity:{{d.op}};"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:#8A8A8A;">{{d.label}}</span><button type="button" onClick="{{d.pick}}" aria-pressed="{{d.sel}}" aria-label="{{d.tip}}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:40px;height:46px;padding:0;border-radius:14px;cursor:pointer;background:{{d.bg}};border:1.5px solid {{d.ring2}};color:{{d.numColor}};font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="font-weight:{{d.w}};">{{d.n}}</span><span style="display:flex;gap:3px;height:5px;align-items:center;"><sc-for list="{{d.dots}}" as="x" hint-placeholder-count="2"><span style="width:4px;height:4px;border-radius:50%;background:{{x.c}};"></span></sc-for></span></button></span></sc-for></div>
       </sc-if>
 
       <sc-if value="{{calOpen}}" hint-placeholder-val="{{ false }}">
@@ -168,62 +159,11 @@
       </sc-if>
     </section>
 
-    <!-- OVERVIEW -->
-    <section style="background: #1A1A1A; border: 1px solid #292929; border-radius: 16px; padding: 12px 12px 12px;">
-      <h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">Overview</h2>
-      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px;">
-        <sc-for list="{{overview}}" as="o" hint-placeholder-count="4">
-<sc-if value="{{o.isLink}}" hint-placeholder-val="{{ false }}">          <a href="{{o.href}}" title="{{o.hint}}" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-radius: 12px; text-align: left; cursor: pointer; font: inherit; text-decoration: none; background: {{o.bg}}; border: 1px solid {{o.border}};">
-            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; line-height: 1.1; color: #F5F5F5;">{{o.value}}</span>
-            <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #A8A8A8;">{{o.label}}</span>
-          </a></sc-if><sc-if value="{{o.isBtn}}" hint-placeholder-val="{{ true }}">          <button type="button" title="{{o.hint}}" onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-radius: 12px; text-align: left; cursor: pointer; font: inherit; background: {{o.bg}}; border: 1px solid {{o.border}};">
-            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; line-height: 1.1; color: #F5F5F5;">{{o.value}}</span>
-            <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #A8A8A8;">{{o.label}}</span>
-          </button></sc-if>
-        </sc-for>
-      </div>
-    </section>
-
-
-      <!-- HABITS -->
-    <section style="background: #1A1A1A; border: 1px solid #292929; border-radius: 16px; padding: 12px 12px 6px;">
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <button type="button" onClick="{{toggleHab}}" aria-expanded="{{habOpen}}" aria-label="Show or hide the weekly streak view" style="display: flex; align-items: center; gap: 8px; min-height: 44px; margin: -10px 0; padding: 0; background: none; border: 0; cursor: pointer;"><h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">Habits</h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A9A9A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></button>
-        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9A9A9A;">{{habDay}}{{doneCount}}/{{habitTotal}}</span>
-      </div>
-      <sc-if value="{{habOpen}}" hint-placeholder-val="{{ false }}">
-      <div style="display: grid; grid-template-columns: 96px repeat(7, minmax(0, 1fr)); align-items: center; margin-top: 10px;">
-        <span></span>
-        <sc-for list="{{dayHeads}}" as="d" hint-placeholder-count="7">
-          <span style="justify-self: center; width: 22px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: {{d.bg}}; color: {{d.color}};">{{d.t}}</span>
-        </sc-for>
-      </div>
-      <sc-for list="{{habits}}" as="h" hint-placeholder-count="5">
-        <div style="display: grid; grid-template-columns: 96px repeat(7, minmax(0, 1fr)); align-items: center; min-height: 36px; margin-top: 2px; border-top: 1px solid #262626;">
-          <span style="display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; font-weight: 500; color: #E0E0E0;"><sc-if value="{{h.isMeditation}}" hint-placeholder-val="{{ false }}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D0D0D0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4c2.2 2.6 2.2 7.4 0 11-2.2-3.6-2.2-8.4 0-11Z"></path><path d="M4 9c3.2.2 5.8 2.2 8 6-3.8 1-7-.8-8-6Z"></path><path d="M20 9c-3.2.2-5.8 2.2-8 6 3.8 1 7-.8 8-6Z"></path><path d="M6 19.5h12"></path></svg>
-              </sc-if><sc-if value="{{h.isPrayer}}" hint-placeholder-val="{{ false }}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D0D0D0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"></path><path d="M6 8h12"></path></svg>
-              </sc-if><sc-if value="{{h.isTraining}}" hint-placeholder-val="{{ false }}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D0D0D0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5v11"></path><path d="M17.5 6.5v11"></path><path d="M3.5 9v6"></path><path d="M20.5 9v6"></path><path d="M6.5 12h11"></path></svg>
-              </sc-if><sc-if value="{{h.isStudying}}" hint-placeholder-val="{{ false }}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D0D0D0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-              </sc-if><sc-if value="{{h.isReading}}" hint-placeholder-val="{{ false }}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D0D0D0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>
-              </sc-if>{{h.name}}</span>
-          <sc-for list="{{h.cells}}" as="c" hint-placeholder-count="7">
-            <button type="button" onClick="{{c.toggle}}" aria-pressed="{{c.on}}" aria-label="{{c.label}}" style="height: 36px; padding: 0; background: none; border: 0; cursor: {{c.cursor}}; display: flex; align-items: center; justify-content: center;">
-              <span style="width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{c.bg}}; border: 1.5px solid {{c.border}};"><sc-if value="{{c.on}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if></span>
-            </button>
-          </sc-for>
-        </div>
-      </sc-for>
-    </sc-if>
-      <sc-if value="{{habClosed}}" hint-placeholder-val="{{ true }}">
-      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; margin-top: 6px;">
-        <sc-for list="{{habits}}" as="h" hint-placeholder-count="5">
-          <button type="button" onClick="{{h.toggle}}" aria-pressed="{{h.done}}" aria-label="{{h.name}}" style="display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 64px; box-sizing: border-box; padding: 4px 0; background: none; border: 0; cursor: pointer;">
-            <span style="width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: {{h.tileBg}}; border: 1px solid {{h.tileBorder}};">
+    
+    <section style="background:#1A1A1A;border:1px solid #292929;border-radius:16px;padding:16px;box-sizing:border-box;padding:14px 0 12px;overflow:hidden;flex-shrink:0;"><div id="stackA" onScroll="{{stk.aonStack}}" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;cursor:grab;user-select:none;-webkit-user-select:none;"><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="display:flex;align-items:center;gap:12px;padding-bottom:10px;"><button type="button" onClick="{{stk.pickCap}}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;background:none;border:0;padding:6px 0;cursor:pointer;color:{{stk.capC}};letter-spacing:0.14em;">CAPTURE</button><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;color:#6B6B6B;">·</span><button type="button" onClick="{{stk.pickRef}}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;background:none;border:0;padding:6px 0;cursor:pointer;color:{{stk.refC}};letter-spacing:0.14em;">REFLECT</button></div><sc-if value="{{stk.capOn}}" hint-placeholder-val="{{ true }}"><textarea aria-label="Captures" data-vault="daily note · ## Captures" title="daily note · ## Captures" placeholder="Write…" value="{{captureText}}" onInput="{{onCapture}}" style="display:block;width:100%;box-sizing:border-box;height:160px;padding:0 0 0 12px;background:none;border:0;border-left:2px solid #3A3A3A;border-radius:0;resize:none;font:inherit;font-size:14.5px;line-height:1.5;color:#E0E0E0;outline-offset:2px;"></textarea></sc-if><sc-if value="{{stk.refOn}}" hint-placeholder-val="{{ false }}"><textarea aria-label="Reflections" data-vault="daily note · ## Reflection" title="daily note · ## Reflection" placeholder="Write…" value="{{reflectText}}" onInput="{{onReflect}}" style="display:block;width:100%;box-sizing:border-box;height:160px;padding:0 0 0 12px;background:none;border:0;border-left:2px solid #3A3A3A;border-radius:0;resize:none;font:inherit;font-size:14.5px;line-height:1.5;color:#E0E0E0;outline-offset:2px;"></textarea></sc-if></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;">TASKS</span><button type="button" onClick="{{toggleAdd}}" aria-label="Add task" aria-expanded="{{adding}}" style="width:34px;height:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><sc-if value="{{todayEv.has}}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid #262626;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:26px;white-space:nowrap;">{{todayEv.time}}</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:15px;">{{todayEv.title}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:2px;">{{todayEv.then}}</span></span><span style="font-size:12px;color:#B5B5B5;white-space:nowrap;">{{todayEv.in}}</span></div></sc-if><sc-if value="{{noTasks}}" hint-placeholder-val="{{ false }}"><p style="padding:14px 0 4px;font-size:13.5px;color:#8A8A8A;border-top:1px solid #262626;">Nothing open.</p></sc-if><sc-for list="{{todayRows}}" as="t" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #262626;"><button type="button" onClick="{{t.toggle}}" aria-label="{{t.ariaLabel}}" aria-pressed="{{t.done}}" style="flex:0 0 auto;width:28px;height:28px;padding:0;border-radius:50%;background:none;border:1.5px solid #707070;cursor:pointer;"></button><span role="button" tabindex="0" aria-label="Edit task: {{t.title}}" onClick="{{t.edit}}" style="flex:1;min-width:0;cursor:pointer;font-size:14.5px;overflow-wrap:anywhere;">{{t.title}}</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:{{t.rcol}};white-space:nowrap;"><span style="width:7px;height:7px;border-radius:50%;background:{{t.priDot}};"></span>{{t.right}}</span></div></sc-for></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;">HABITS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;">TODAY · {{doneCount}} OF {{habitTotal}}</span></div><div style="display:flex;flex-direction:column;gap:3px;"><sc-for list="{{hgrid}}" as="r" hint-placeholder-count="7"><div style="display:flex;gap:3px;"><sc-for list="{{r.cells}}" as="c" hint-placeholder-count="18"><span style="flex:1;min-width:0;aspect-ratio:1/1;border-radius:3px;box-sizing:border-box;background:{{c.bg}};border:{{c.bd}};"></span></sc-for></div></sc-for></div><div style="display:flex;justify-content:space-between;padding:14px 2px 0;"><sc-for list="{{habits}}" as="h" hint-placeholder-count="5">
+          <button type="button" onClick="{{h.toggle}}" aria-pressed="{{h.done}}" aria-label="{{h.name}}" style="background:none;border:0;padding:0;cursor:pointer;">
+            <span style="width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{h.tileBg}}; border: 1px solid {{h.tileBorder}};">
               <sc-if value="{{h.isMeditation}}" hint-placeholder-val="{{ false }}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{h.iconColor}}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4c2.2 2.6 2.2 7.4 0 11-2.2-3.6-2.2-8.4 0-11Z"></path><path d="M4 9c3.2.2 5.8 2.2 8 6-3.8 1-7-.8-8-6Z"></path><path d="M20 9c-3.2.2-5.8 2.2-8 6 3.8 1 7-.8 8-6Z"></path><path d="M6 19.5h12"></path></svg>
               </sc-if>
@@ -240,66 +180,16 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{h.iconColor}}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>
               </sc-if>
             </span>
-            <span style="font-size: 10.5px; font-weight: 500; color: {{h.nameColor}};">{{h.name}}</span>
+            
           </button>
-        </sc-for>
-      </div>
-      </sc-if>
-    </section>
-
-    <!-- DAILY NOTE: TASKS / CAPTURES / REFLECTIONS -->
-    <section style="background: #1A1A1A; border: 1px solid #292929; border-radius: 16px; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 12px;">
-      <div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">Tasks</h2>
-          <button type="button" onClick="{{toggleAdd}}" aria-label="Add task" aria-expanded="{{adding}}" style="width: 44px; height: 44px; margin: -10px -12px -10px 0; display: flex; align-items: center; justify-content: center; background: none; border: 0; cursor: pointer; color: #D0D0D0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
-        </div>
-        
-<sc-if value="{{noTasks}}" hint-placeholder-val="{{ false }}">
-          <p style="padding: 14px 0 4px; font-size: 13.5px; color: #8A8A8A;">Nothing open.</p>
-        </sc-if>
-        <sc-for list="{{taskGroups}}" as="g" hint-placeholder-count="2">
-          <div style="margin-top: 12px;">
-            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
-              <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: #8A8A8A;">{{g.label}}</span>
-            </div>
-        <sc-for list="{{g.items}}" as="t" hint-placeholder-count="1">
-          <div style="display: flex; align-items: flex-start; gap: 0; margin-top: 2px; padding-bottom: 6px;">
-            <button type="button" onClick="{{t.toggle}}" aria-pressed="{{t.done}}" aria-label="{{t.ariaLabel}}" style="flex: 0 0 44px; width: 44px; height: 44px; margin-left: -13px; margin-right: 0; padding: 0; background: none; border: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-              <span style="width: 18px; height: 18px; box-sizing: border-box; border-radius: 5px; display: flex; align-items: center; justify-content: center; background: {{t.checkBg}}; border: 1.5px solid {{t.checkBorder}};">
-                <sc-if value="{{t.done}}" hint-placeholder-val="{{ false }}">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
-                </sc-if>
-              </span>
-            </button>
-            <div style="flex: 1; min-width: 0; padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-size: 14px; font-weight: 500; line-height: 1.35; color: {{t.titleColor}}; text-decoration: {{t.titleDecor}}; overflow-wrap: anywhere;">{{t.title}}</span>
-              <span style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <sc-if value="{{t.hasDue}}" hint-placeholder-val="{{ true }}"><span title="{{t.dueField}}" style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; color: {{t.dueColor}}; border: 1px solid {{t.dueBorder}};"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{t.dueText}}</span></sc-if>
-              <span title="{{t.priorityField}}" style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; color: #C8C8C8; border: 1px solid #3A3A3A;"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{t.priDot}};"></span>{{t.priority}}</span>
-            </span>
-            </div>
-          </div>
-        </sc-for>
-          </div>
-        </sc-for>
-      </div>
-      <div>
-        <h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">Captures</h2>
-        <textarea aria-label="Captures" data-vault="daily note · ## Captures" title="daily note · ## Captures" placeholder="Write…" value="{{captureText}}" onInput="{{onCapture}}" style="margin-top: 8px; display: block; width: 100%; box-sizing: border-box; min-height: 56px; padding: 0 0 0 12px; background: none; border: 0; border-left: 2px solid #3A3A3A; border-radius: 0; resize: none; font: inherit; font-size: 14px; line-height: 1.5; color: #E0E0E0; outline-offset: 2px;"></textarea>
-      </div>
-      <div>
-        <h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; color: #F5F5F5;">Reflections</h2>
-        <textarea aria-label="Reflections" data-vault="daily note · ## Reflection" title="daily note · ## Reflection" placeholder="Write…" value="{{reflectText}}" onInput="{{onReflect}}" style="margin-top: 8px; display: block; width: 100%; box-sizing: border-box; min-height: 56px; padding: 0 0 0 12px; background: none; border: 0; border-left: 2px solid #3A3A3A; border-radius: 0; resize: none; font: inherit; font-size: 14px; line-height: 1.5; color: #E0E0E0; outline-offset: 2px;"></textarea>
-      </div>
-    </section>
-
-    <section style="background: #1A1A1A; border: 1px solid #292929; border-radius: 16px; padding: 18px 20px 20px;"><h2 style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #F5F5F5;">Quick links</h2><div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px;"><a href="{{ql.gmail}}" target="_blank" rel="noopener" aria-label="Open Gmail" style="min-height: 48px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; display: flex; align-items: center; gap: 8px; background: #222222; border: 1px solid #2E2E2E; color: #E6E6E6; font-size: 14px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg><span style="flex: 1;">Gmail</span></a><a href="{{ql.canvas}}" target="_blank" rel="noopener" aria-label="Open Canvas" style="min-height: 48px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; display: flex; align-items: center; gap: 8px; background: #222222; border: 1px solid #2E2E2E; color: #E6E6E6; font-size: 14px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"></path><path d="M6 11v5c0 1 3 3 6 3s6-2 6-3v-5"></path></svg><span style="flex: 1;">Canvas</span></a><a href="{{ql.drive}}" target="_blank" rel="noopener" aria-label="Open Drive" style="min-height: 48px; box-sizing: border-box; padding: 0 10px; border-radius: 12px; display: flex; align-items: center; gap: 8px; background: #222222; border: 1px solid #2E2E2E; color: #E6E6E6; font-size: 14px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span style="flex: 1;">Drive</span></a></div></section>
+        </sc-for></div>
+    </div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="display:flex;align-items:center;gap:12px;padding-bottom:10px;"><button type="button" onClick="{{stk.pickCap}}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;background:none;border:0;padding:6px 0;cursor:pointer;color:{{stk.capC}};letter-spacing:0.14em;">CAPTURE</button><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;color:#6B6B6B;">·</span><button type="button" onClick="{{stk.pickRef}}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;background:none;border:0;padding:6px 0;cursor:pointer;color:{{stk.refC}};letter-spacing:0.14em;">REFLECT</button></div><sc-if value="{{stk.capOn}}" hint-placeholder-val="{{ true }}"><textarea aria-label="Captures" data-vault="daily note · ## Captures" title="daily note · ## Captures" placeholder="Write…" value="{{captureText}}" onInput="{{onCapture}}" style="display:block;width:100%;box-sizing:border-box;height:160px;padding:0 0 0 12px;background:none;border:0;border-left:2px solid #3A3A3A;border-radius:0;resize:none;font:inherit;font-size:14.5px;line-height:1.5;color:#E0E0E0;outline-offset:2px;"></textarea></sc-if><sc-if value="{{stk.refOn}}" hint-placeholder-val="{{ false }}"><textarea aria-label="Reflections" data-vault="daily note · ## Reflection" title="daily note · ## Reflection" placeholder="Write…" value="{{reflectText}}" onInput="{{onReflect}}" style="display:block;width:100%;box-sizing:border-box;height:160px;padding:0 0 0 12px;background:none;border:0;border-left:2px solid #3A3A3A;border-radius:0;resize:none;font:inherit;font-size:14.5px;line-height:1.5;color:#E0E0E0;outline-offset:2px;"></textarea></sc-if></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;">TASKS</span><button type="button" onClick="{{toggleAdd}}" aria-label="Add task" aria-expanded="{{adding}}" style="width:34px;height:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><sc-if value="{{todayEv.has}}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid #262626;"><span style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:26px;white-space:nowrap;">{{todayEv.time}}</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:15px;">{{todayEv.title}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:2px;">{{todayEv.then}}</span></span><span style="font-size:12px;color:#B5B5B5;white-space:nowrap;">{{todayEv.in}}</span></div></sc-if><sc-if value="{{noTasks}}" hint-placeholder-val="{{ false }}"><p style="padding:14px 0 4px;font-size:13.5px;color:#8A8A8A;border-top:1px solid #262626;">Nothing open.</p></sc-if><sc-for list="{{todayRows}}" as="t" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #262626;"><button type="button" onClick="{{t.toggle}}" aria-label="{{t.ariaLabel}}" aria-pressed="{{t.done}}" style="flex:0 0 auto;width:28px;height:28px;padding:0;border-radius:50%;background:none;border:1.5px solid #707070;cursor:pointer;"></button><span role="button" tabindex="0" aria-label="Edit task: {{t.title}}" onClick="{{t.edit}}" style="flex:1;min-width:0;cursor:pointer;font-size:14.5px;overflow-wrap:anywhere;">{{t.title}}</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:{{t.rcol}};white-space:nowrap;"><span style="width:7px;height:7px;border-radius:50%;background:{{t.priDot}};"></span>{{t.right}}</span></div></sc-for></div></div><div id="adots" class="stkdots" style="display:flex;justify-content:center;gap:6px;padding-top:8px;"><button type="button" onClick="{{stk.ago0}}" aria-label="Page 1" style="width:{{stk.adw0}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.adc0}};transition:width 0.15s;"></button><button type="button" onClick="{{stk.ago1}}" aria-label="Page 2" style="width:{{stk.adw1}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.adc1}};transition:width 0.15s;"></button><button type="button" onClick="{{stk.ago2}}" aria-label="Page 3" style="width:{{stk.adw2}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.adc2}};transition:width 0.15s;"></button></div></section>
+    <section style="background:#1A1A1A;border:1px solid #292929;border-radius:16px;padding:16px;box-sizing:border-box;padding:14px 0 12px;overflow:hidden;flex-shrink:0;"><div id="stackB" onScroll="{{stk.bonStack}}" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;cursor:grab;user-select:none;-webkit-user-select:none;"><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><a href="HealthPhone.dc.html" aria-label="Open Health" style="display:block;text-decoration:none;color:inherit;"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;padding-bottom:12px;">HEALTH</div><div style="display:flex;"><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.steps}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Steps today</span></div><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.lifts}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Lifts this week</span></div><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.cardio}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Cardio this week</span></div></div></a></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;padding-bottom:12px;">OVERVIEW</div><div style="display:flex;"><sc-for list="{{overview}}" as="o" hint-placeholder-count="4"><sc-if value="{{o.isLink}}" hint-placeholder-val="{{ false }}"><a href="{{o.href}}" title="{{o.hint}}" style="flex:1;min-width:0;display:block;text-decoration:none;color:inherit;border-left:{{o.bl}};padding-left:{{o.pl}};"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:{{o.fs}};line-height:1;white-space:nowrap;">{{o.value}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{o.label}}</span></a></sc-if><sc-if value="{{o.isBtn}}" hint-placeholder-val="{{ true }}"><button type="button" title="{{o.hint}}" onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="flex:1;min-width:0;display:block;text-align:left;background:none;border:0;border-left:{{o.bl}};padding:0 0 0 {{o.pl}};cursor:pointer;color:inherit;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:{{o.fs}};line-height:1;white-space:nowrap;">{{o.value}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{o.label}}</span></button></sc-if></sc-for></div></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;padding-bottom:10px;">QUICK LINKS</div><div style="display:flex;gap:18px;justify-content:center;"><a href="{{ql.gmail}}" target="_blank" rel="noopener" aria-label="Open Gmail" style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;text-decoration:none;"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/></svg></a><a href="{{ql.canvas}}" target="_blank" rel="noopener" aria-label="Open Canvas" style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;text-decoration:none;"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M.4403 15.4142a13.7061 13.7061 0 0 1-.4362-3.4403 13.7 13.7 0 0 1 .4362-3.4401c1.7144.2103 3.0438 1.6686 3.0438 3.44 0 1.771-1.3287 3.23-3.0438 3.4404zm3.9728-3.4403c0 .6004.4866 1.0873 1.0872 1.0873.601 0 1.088-.487 1.088-1.0873s-.487-1.088-1.088-1.088c-.6006 0-1.0872.4876-1.0872 1.088zM23.56 8.5338c-1.7151.2103-3.044 1.6686-3.044 3.44 0 1.771 1.3289 3.23 3.044 3.4404a13.7313 13.7313 0 0 0 .436-3.4403c0-1.1883-.1518-2.3413-.436-3.4401zm-6.148 3.44c0 .6005.4865 1.0874 1.0877 1.0874.6002 0 1.088-.487 1.088-1.0873s-.4878-1.088-1.088-1.088c-.6012 0-1.0877.4876-1.0877 1.088zm-5.4347 8.5465c-1.7709 0-3.229 1.33-3.44 3.044a13.7364 13.7364 0 0 0 3.441.4357c1.1885 0 2.3403-.1515 3.44-.4357-.2107-1.714-1.6687-3.044-3.441-3.044zm.001-3.1046c-.6012 0-1.0878.4876-1.0878 1.0883s.4866 1.0882 1.0878 1.0882c.6 0 1.087-.4874 1.087-1.0882s-.487-1.0883-1.087-1.0883zm0-13.936c1.7713 0 3.2295-1.3292 3.4399-3.0438A13.7353 13.7353 0 0 0 11.9782 0c-1.1887 0-2.3412.1519-3.441.4359.211 1.7146 1.6691 3.0438 3.441 3.0438zm0 .9291c-.6012 0-1.0878.4866-1.0878 1.0876 0 .6002.4866 1.0876 1.0878 1.0876.6 0 1.087-.4874 1.087-1.0876 0-.601-.487-1.0876-1.087-1.0876zm6.032 13.5965c-1.2514 1.2523-1.344 3.2211-.2825 4.582a13.762 13.762 0 0 0 4.8636-4.8654c-1.3608-1.0597-3.3299-.9673-4.5812.2834zm-.6568-2.1948c-.425-.4245-1.1135-.4245-1.539 0-.4243.4252-.4243 1.1136 0 1.5383.4255.4253 1.114.4253 1.539 0 .424-.4247.424-1.1131 0-1.5383zM5.9648 5.9603c1.2516-1.2513 1.3437-3.2206.2825-4.5813a13.7677 13.7677 0 0 0-4.8644 4.8643c1.3612 1.0616 3.3306.9687 4.582-.283zm.6567.6572c-.424.4247-.424 1.1139 0 1.5383.4245.4246 1.114.4246 1.5382 0 .4248-.4244.4248-1.1136 0-1.5383-.4243-.4243-1.1137-.4243-1.5382 0zm15.9625-.3857a13.7597 13.7597 0 0 0-4.8637-4.8642c-1.0614 1.3609-.969 3.33.2823 4.5818 1.2517 1.2507 3.2204 1.3436 4.5814.2824zM17.346 8.1443c.4237-.4248.4237-1.1135 0-1.5383-.425-.4247-1.1145-.4247-1.5388 0-.4241.4248-.4241 1.1135 0 1.5383.4243.4243 1.1137.4243 1.5388 0zM1.3772 17.7087a13.763 13.763 0 0 0 4.8647 4.8654c1.0613-1.3608.9685-3.3297-.2833-4.5818-1.2512-1.251-3.2204-1.3436-4.5814-.2836zm5.2385-1.9115c-.4238.4247-.4238 1.1136 0 1.5384.425.4246 1.1141.4246 1.5382 0 .425-.4248.425-1.1137 0-1.5384-.4241-.4245-1.1131-.4245-1.5382 0z"/></svg></a><a href="{{ql.drive}}" target="_blank" rel="noopener" aria-label="Open Drive" style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1F1F1F;border:1px solid #3A3A3A;color:#F5F5F5;text-decoration:none;"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.01 1.485c-2.082 0-3.754.02-3.743.047.01.02 1.708 3.001 3.774 6.62l3.76 6.574h3.76c2.081 0 3.753-.02 3.742-.047-.01-.02-1.708-3.001-3.775-6.62l-3.76-6.574zm-4.76 1.73a789.828 789.861 0 0 0-3.63 6.319L0 15.868l1.89 3.298 1.885 3.297 3.62-6.335 3.618-6.33-1.88-3.287C8.1 4.704 7.255 3.22 7.25 3.214zm2.259 12.653-.203.348c-.114.198-.96 1.672-1.88 3.287a423.93 423.93 0 0 1-1.698 2.97c-.01.026 3.24.042 7.222.042h7.244l1.796-3.157c.992-1.734 1.85-3.23 1.906-3.323l.104-.167h-7.249z"/></svg></a></div></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><a href="HealthPhone.dc.html" aria-label="Open Health" style="display:block;text-decoration:none;color:inherit;"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;padding-bottom:12px;">HEALTH</div><div style="display:flex;"><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.steps}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Steps today</span></div><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.lifts}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Lifts this week</span></div><div style="flex:1;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{hh.cardio}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">Cardio this week</span></div></div></a></div><div style="flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#8A8A8A;padding-bottom:12px;">OVERVIEW</div><div style="display:flex;"><sc-for list="{{overview}}" as="o" hint-placeholder-count="4"><sc-if value="{{o.isLink}}" hint-placeholder-val="{{ false }}"><a href="{{o.href}}" title="{{o.hint}}" style="flex:1;min-width:0;display:block;text-decoration:none;color:inherit;border-left:{{o.bl}};padding-left:{{o.pl}};"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{o.value}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">{{o.label}}</span></a></sc-if><sc-if value="{{o.isBtn}}" hint-placeholder-val="{{ true }}"><button type="button" title="{{o.hint}}" onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="flex:1;min-width:0;display:block;text-align:left;background:none;border:0;border-left:{{o.bl}};padding:0 0 0 {{o.pl}};cursor:pointer;color:inherit;"><span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;color:#F5F5F5;font-size:28px;line-height:1;">{{o.value}}</span><span style="display:block;font-size:12px;color:#8A8A8A;margin-top:8px;">{{o.label}}</span></button></sc-if></sc-for></div></div></div><div id="bdots" class="stkdots" style="display:flex;justify-content:center;gap:6px;padding-top:8px;"><button type="button" onClick="{{stk.bgo0}}" aria-label="Page 1" style="width:{{stk.bdw0}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.bdc0}};transition:width 0.15s;"></button><button type="button" onClick="{{stk.bgo1}}" aria-label="Page 2" style="width:{{stk.bdw1}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.bdc1}};transition:width 0.15s;"></button><button type="button" onClick="{{stk.bgo2}}" aria-label="Page 3" style="width:{{stk.bdw2}}px;height:6px;padding:0;border:0;border-radius:3px;cursor:pointer;background:{{stk.bdc2}};transition:width 0.15s;"></button></div></section>
 
   </div><sc-if value="{{adding}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; z-index: 44;"><button type="button" onClick="{{cancelAdd}}" aria-label="Close" class="lg-anim" style="position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(0,0,0,0.35); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); cursor: default; animation: lgFade 0.22s ease-out backwards;"></button><div role="dialog" aria-label="New task" class="lg-anim" style="position: absolute; z-index: 45; left: 12px; right: 12px; top: 56px; max-height: calc(100% - 190px); overflow-y: auto; box-sizing: border-box; padding: 14px; border-radius: 28px; background: rgba(46,46,46,0.55); -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%); border: 1px solid rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(255,255,255,0.05), 0 16px 40px rgba(0,0,0,0.5); transform-origin: 85% 100%; animation: lgIn 0.46s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;">
           <div style="display: flex; flex-direction: column; gap: 8px;">
           <input type="text" aria-label="Task title" placeholder="New task" value="{{newTitle}}" onInput="{{onTitle}}" onKeyDown="{{onKey}}" style="height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; background: #222222; border: 1px solid #333; color: #F5F5F5; font-size: 14px; flex: 0 0 auto; width: 100%;">
-          <button type="button" onClick="{{togglePicker}}" aria-expanded="{{pickerOpen}}" aria-label="Due date" title="due::" style="height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; background: #222222; border: 1px solid #333; cursor: pointer; display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; font-size: 14px; color: {{dueBtnColor}};"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{dueBtn}}</button><input type="text" aria-label="Time" title="time::" placeholder="Time" value="{{newTime}}" onInput="{{onTime}}" style="height: 44px; width: 96px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; background: #222222; border: 1px solid #333; color: #F5F5F5; font-size: 14px;">
+          <button type="button" onClick="{{togglePicker}}" aria-expanded="{{pickerOpen}}" aria-label="Due date" title="due::" style="height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; background: #222222; border: 1px solid #333; cursor: pointer; display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; font-size: 14px; color: {{dueBtnColor}};"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{dueBtn}}</button><div style="position: relative; height: 44px; box-sizing: border-box; border-radius: 12px; background: #222222; border: 1px solid #333; display: flex; align-items: center; gap: 8px; padding: 0 12px; min-width: 150px; font-size: 14px; color: {{timeBtnColor}};"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>{{timeBtn}}</span><input type="time" aria-label="Time" title="time::" value="{{newTime}}" onInput="{{onTime}}" onChange="{{onTime}}" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; border: 0; background: none;"></div>
           <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
           <div style="flex-basis: 100%; margin-top: 2px; padding: 8px 10px 10px; border-radius: 12px; background: #222222; border: 1px solid #333;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -351,6 +241,33 @@
 class Component extends DCLogic {
   componentDidMount() {
     this._vinit(false);
+    try {
+      ['stackA', 'stackB'].forEach((id) => { const el0 = () => document.getElementById(id); ['touchstart', 'pointerdown', 'wheel'].forEach((ev) => { try { document.addEventListener(ev, (e) => { const el = el0(); if (el && el.contains(e.target)) this._touched = true; }, { passive: true, capture: true }); } catch (x) {} }); [350, 900, 2000].forEach((t) => setTimeout(() => { if (this._touched) return; const el = el0(); if (!el) return; const w = el.clientWidth; if (w > 0 && Math.abs(el.scrollLeft - w) > 2) { el.style.scrollSnapType = 'none'; el.scrollLeft = w; setTimeout(() => { el.style.scrollSnapType = 'x mandatory'; }, 60); } }, t)); });
+    } catch (e) {}
+    try {
+    this._t0 = Date.now();
+    if (this._db) return; this._db = 1;
+    const N = { stackA: 3, stackB: 3 };
+    const el_ = (id) => document.getElementById(id);
+    const W = (id) => Math.max(1, (el_(id) || { clientWidth: 1 }).clientWidth);
+    const real = (raw, n) => ((raw - 1) % n + n) % n;
+    this._fix = (id) => { const el = el_(id); if (!el) return; const n = N[id], raw = Math.round(el.scrollLeft / W(id)); if (raw === 0 || raw === n + 1) { el.style.scrollSnapType = 'none'; el.scrollLeft = (raw === 0 ? n : 1) * W(id); setTimeout(() => { el.style.scrollSnapType = 'x mandatory'; }, 60); } };
+    this._to = (id, raw) => { const el = el_(id); if (!el) return; el.scrollTo({ left: raw * W(id), behavior: 'smooth' }); this.setState({ [id === 'stackA' ? 'pgA' : 'pgB']: real(raw, N[id]) }); clearTimeout(this['_ft' + id]); this['_ft' + id] = setTimeout(() => this._fix(id), 420); };
+    ['stackA', 'stackB'].forEach((id) => setTimeout(() => { const el = el_(id); if (el) { el.style.scrollSnapType = 'none'; el.scrollLeft = W(id); setTimeout(() => { el.style.scrollSnapType = 'x mandatory'; }, 60); } }, 60));
+    try { if (new URLSearchParams(location.search).get('reflect')) { this._touched = true; this.setState({ capTab: 'ref' }); setTimeout(() => { const el = el_('stackA'); if (el) { el.style.scrollSnapType = 'none'; el.scrollLeft = 3 * W('stackA'); setTimeout(() => { el.style.scrollSnapType = 'x mandatory'; }, 60); } }, 500); } } catch (e) {}
+    const showDots = (id) => { if (Date.now() - this._t0 < 700) return; const k = id === 'stackA' ? 'adots' : 'bdots'; const d = el_(k); if (!d) return; d.classList.add('on'); clearTimeout(this['_dt' + id]); this['_dt' + id] = setTimeout(() => { const x = el_(k); if (x) x.classList.remove('on'); }, 1100); };
+    ['stackA', 'stackB'].forEach((id) => { const el = el_(id); if (!el) return; ['scroll', 'touchstart', 'pointerdown', 'wheel'].forEach((ev) => el.addEventListener(ev, () => showDots(id), { passive: true })); });
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      for (const id of ['stackA', 'stackB']) { const el = el_(id); if (!el || !el.contains(e.target)) continue;
+        if (id === 'stackA' && e.target.closest && e.target.closest('textarea, input, button')) return;   // typing/tapping inside the pages is not a swipe
+        this._dg = { id, x: e.clientX, left: el.scrollLeft, moved: 0 }; el.style.scrollSnapType = 'none'; el.style.cursor = 'grabbing'; e.preventDefault(); return; }
+    });
+    document.addEventListener('click', (e) => { if (this._jd && e.target.closest && e.target.closest('#stackA, #stackB')) { e.preventDefault(); e.stopPropagation(); } this._jd = false; }, true);
+    document.addEventListener('mousemove', (e) => { const d = this._dg; if (!d) return; const el = el_(d.id); if (!el) return; const dx = e.clientX - d.x; d.moved = Math.max(d.moved, Math.abs(dx)); el.scrollLeft = d.left - dx; e.preventDefault(); });
+    document.addEventListener('mouseup', () => { const d = this._dg; this._dg = null; if (!d) return; const el = el_(d.id); if (!el) return; el.style.cursor = 'grab'; this._jd = d.moved > 6; const n = N[d.id]; let raw = Math.round(el.scrollLeft / W(d.id)); if (d.moved > 40) { const dir = el.scrollLeft > d.left ? 1 : -1; raw = Math.max(0, Math.min(n + 1, Math.round(d.left / W(d.id)) + dir)); } setTimeout(() => { el.style.scrollSnapType = 'x mandatory'; }, 400); this._to(d.id, raw); });
+
+    } catch (e) {}
     try { const ld = () => { if (window.vault && window.vault.on) return; try { const v = JSON.parse(localStorage.getItem('lifeos.hdone') || 'null'); if (v && typeof v === 'object') this.setState({ hdone: v }); } catch (e) {} }; ld(); this._hst = (e) => { if (!e || e.key === 'lifeos.hdone') ld(); }; window.addEventListener('storage', this._hst); } catch (e) {}
     // island: slide the active pill from the previous section to this one
     try {
@@ -380,7 +297,7 @@ class Component extends DCLogic {
       setTimeout(go, 40);
     } catch (e) {}
     this.setState({ now: Date.now() });
-    this._tick = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    this._tick = setInterval(() => this._tickClock(), 1000);
   }
   componentWillUnmount() {
     try { if (this._vt) clearInterval(this._vt); if (this._vv) document.removeEventListener('visibilitychange', this._vv); } catch (e) {}
@@ -456,6 +373,9 @@ class Component extends DCLogic {
       const fut = key > todayKey;
       return {
         label,
+        key,
+        w: isSel ? 600 : 400,
+        ring2: key === todayKey && !isSel ? '#8A8A8A' : 'transparent',
         n: d.getDate(),
         bg: isSel ? '#EDEDED' : 'transparent',
         ring: key === todayKey && !isSel ? '1px solid #6A6A6A' : '1px solid transparent',
@@ -559,12 +479,15 @@ class Component extends DCLogic {
     // agent
     const chatOpen = !!s.chatOpen;
     const listening = !!s.listening;
-    const msgs = (s.msgs || []).map((m) => ({
-      text: m.text,
-      align: m.role === 'user' ? 'flex-end' : 'flex-start',
-      bg: m.role === 'user' ? '#EDEDED' : '#222222',
-      fg: m.role === 'user' ? '#121212' : '#B5B5B5'
-    }));
+    const msgs = [];
+    (s.msgs || []).forEach((m, mi) => {
+      msgs.push({ isBubble: true, isCard: false, text: m.text, align: m.role === 'user' ? 'flex-end' : 'flex-start', bg: m.role === 'user' ? '#EDEDED' : '#222222', fg: m.role === 'user' ? '#121212' : '#B5B5B5' });
+      (m.proposed || []).forEach((p, pi) => msgs.push({
+        isBubble: false, isCard: true, label: p.label, pending: p.state === 'pending',
+        hasResult: p.state !== 'pending', result: p.state === 'working' ? 'Working…' : p.state === 'done' ? 'Done.' : p.state === 'declined' ? 'Not done.' : (p.note || "That didn't work."),
+        yes: () => cardYes(mi, pi), no: () => cardNo(mi, pi)
+      }));
+    });
     const prompts = ["What's due today?", 'Plan my day', 'Summarize this week'].map((text) => ({
       text, pick: () => this.setState({ draft: text })
     }));
@@ -582,10 +505,16 @@ class Component extends DCLogic {
       const prompt = "My LifeOS vault is attached. Before anything else, read AGENTS.md at its root and follow it. Then read whatever else you need from the vault. Never invent data. My request: " + text;
       const names = (opts.atts || []).map((a) => a.name);
       this.setState({ msgs: [...(st.msgs || []), { role: 'user', text: text + (names.length ? '\n[' + names.join(', ') + ']' : '') }, { role: 'agent', text: 'Reading your vault…', pending: true }], draft: '', atts: [], attachOpen: false, thinking: false });
-      const done = (reply) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); if (after) after(reply); };
-      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { files: (opts.atts || []).map((a) => a.path), model: opts.model || '' }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
+      const done = (reply, proposed) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); const msg = { role: 'agent', text: reply, proposed: (proposed || []).map((p) => ({ ...p, state: 'pending' })) }; if (k >= 0) cur[k] = msg; else cur.push(msg); this.setState({ msgs: cur }); if (after) after(reply, proposed || []); };
+      const live = (t, status) => { const cur = ((this.state && this.state.msgs) || []).slice(); const k = cur.findIndex((m) => m.pending); if (k < 0) return; const nt = t || (status ? status + '\u2026' : ''); if (!nt || cur[k].text === nt) return; cur[k] = { ...cur[k], text: nt }; this.setState({ msgs: cur }); };
+      if (window.vault && window.vault.ask) window.vault.ask(text, prompt, done, { onText: live, files: (opts.atts || []).map((a) => a.path), model: opts.model || '' }); else done('The vault is not connected, so I cannot read it. Start the LifeOS server and refresh.');
       return true;
     };
+    // A change R.E.N.E.E. proposed: nothing is written until Yes. Then the existing routes do it (support.js, vault.confirmAction).
+    const setCard = (mi, pi, patch) => { const cur = ((this.state && this.state.msgs) || []).slice(); const m = cur[mi]; if (!m || !m.proposed) return; const pr = m.proposed.slice(); pr[pi] = { ...pr[pi], ...patch }; cur[mi] = { ...m, proposed: pr }; this.setState({ msgs: cur }); };
+    const cardAt = (mi, pi) => { const m = ((this.state && this.state.msgs) || [])[mi]; const p = m && m.proposed && m.proposed[pi]; return p && p.state === 'pending' ? p : null; };
+    const cardYes = async (mi, pi) => { const p = cardAt(mi, pi); if (!p) return; setCard(mi, pi, { state: 'working' }); const r = await window.vault.confirmAction(p); setCard(mi, pi, r.ok ? { state: 'done' } : { state: 'error', note: r.message }); };
+    const cardNo = (mi, pi) => { const p = cardAt(mi, pi); if (!p) return; window.vault.declineAction(p); setCard(mi, pi, { state: 'declined' }); };
     const sendMsg = () => { const st = this.state || {}; const text = (st.draft || '').trim(); if (!text && !(st.atts || []).length) return; runAsk(text || 'Look at the attached file(s).', { atts: st.atts || [], model: '' }); };
     const addFiles = async (e) => {
       const fs = Array.from((e && e.target && e.target.files) || []);
@@ -599,6 +528,7 @@ class Component extends DCLogic {
     };
     const RV = () => window.reneeVoice;
     const talkStop = () => {
+      this._pend = null; this._propose = null; // ending the conversation drops anything still waiting for a yes
       try { RV() && RV().stopListen(); RV() && RV().stopSpeak(); } catch (err) {}
       try { if (this._rec) { const r = this._rec; this._rec = null; r.onend = null; r.onerror = null; r.stop(); } } catch (err) {}
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (err) {}
@@ -615,23 +545,44 @@ class Component extends DCLogic {
       try { const u = new SpeechSynthesisUtterance(text); const cv = chosenVoice(); if (cv) u.voice = cv; u.rate = 1.03; u.onend = onend; u.onerror = onend; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); } catch (err) { console.warn('speech failed', err && err.message); onend(); }
     };
     const talkAskSlow = (text) => {
-      const ok = runAsk(text, { atts: [], model: 'haiku' }, (reply) => {
+      const ok = runAsk(text, { atts: [], model: 'haiku' }, (reply, proposed) => {
         if (!((this.state || {}).talk)) return;
+        this._propose = proposed && proposed.length ? proposed : null;
         this.setState({ talk: 'speaking', talkText: reply });
-        speak(reply, () => { if (((this.state || {}).talk) === 'speaking') talkListen(); });
+        speak(reply, () => { if (((this.state || {}).talk) === 'speaking') afterSpoken(); });
       });
       if (!ok) this.setState({ talk: '', voiceNote: 'Still answering the last question.' });
     };
     // Fast path: one warm Claude process, the answer streams back, and speech starts on the first sentence.
+    // After her answer: if she proposed a change, read it back and listen for Yes or No; otherwise just listen.
+    const talkSay = (line, then) => { if (!((this.state || {}).talk)) return; this.setState({ talk: 'speaking', talkText: line }); speak(line, () => { if (((this.state || {}).talk) === 'speaking') then(); }); };
+    const afterSpoken = () => {
+      const pr = this._propose; this._propose = null;
+      if (pr && pr.length) { this._pend = pr; talkSay(pr.map((p) => p.say || p.label).join('. ') + '. Say yes or no.', () => talkListen()); }
+      else talkListen();
+    };
+    const talkConfirm = async (pend) => {
+      let failed = '';
+      for (const p of pend) { const r = await window.vault.confirmAction(p); if (!r.ok && !failed) failed = r.message; }
+      if (!((this.state || {}).talk)) return;
+      talkSay(failed ? "That didn't work. " + failed : 'Done.', () => talkListen());
+    };
     const talkAsk = (text) => {
+      // a change is waiting for Yes or No: this answer is for that. Anything else drops it and is treated as a new question.
+      if (this._pend && this._pend.length) {
+        const pend = this._pend; this._pend = null; const yn = window.vault.yesNo(text);
+        if (yn === true) { this.setState({ talk: 'thinking', talkText: text }); talkConfirm(pend); return; }
+        pend.forEach((p) => window.vault.declineAction(p));
+        if (yn === false) { talkSay('Okay, nothing was changed.', () => talkListen()); return; }
+      }
       this.setState({ talk: 'thinking', talkText: text });
       const R = RV();
       if (!R || !R.ask) { talkAskSlow(text); return; }
       const live = () => !!((this.state || {}).talk);
       R.ask(text, {
         text: (t) => { if (live()) this.setState({ talk: 'speaking', talkText: t }); },
-        done: () => {}, // spoken conversation is not added to the chat list (it is still saved as a transcript in the vault)
-        spoken: () => { if (((this.state || {}).talk) === 'speaking') talkListen(); },
+        done: (t, proposed) => { this._propose = proposed && proposed.length ? proposed : null; }, // spoken conversation is not added to the chat list (it is still saved as a transcript in the vault)
+        spoken: () => { if (((this.state || {}).talk) === 'speaking') afterSpoken(); },
         timing: () => {}, // the timing line is in the console only ([renee timing])
         error: (msg) => { if (live()) this.setState({ talk: '', talkText: '', voiceNote: msg }); },
         fallback: () => { if (live()) talkAskSlow(text); },
@@ -652,28 +603,32 @@ class Component extends DCLogic {
     };
     const talkListen = () => {
       const R = RV();
-      if (!R || R.stt.failed) { talkListenBrowser(); return; }
+      if (!R || (R.stt.failed && !(R.nativeOn && R.nativeOn()))) { talkListenBrowser(); return; } // Whisper failing to load does not matter when the phone's own listening is chosen
       this.setState({ talk: 'listening', talkText: '', voiceNote: '' });
       R.listen({
         status: (st, p) => {
           if (!((this.state || {}).talk)) return;
           if (st === 'loading') this.setState({ voiceNote: (p && p < 100 ? 'Downloading voice, first time only (' + p + '%)...' : 'Setting up voice on your graphics card, up to a minute, first time only...') });
+          else if (st === 'starting') this.setState({ voiceNote: 'Getting ready, one second...' });
           else if (st === 'listening') this.setState({ voiceNote: '', talkText: '' });
-          else if (st === 'hearing') this.setState({ talkText: 'Listening...' });
-          else if (st === 'thinking') this.setState({ talkText: 'Transcribing...' });
+          else if (st === 'hearing') this.setState({ talkText: '' });
+          else if (st === 'thinking') this.setState({ talkText: '' });
+        },
+        partial: (t) => { if (!((this.state || {}).talk)) return; this.setState({ talkText: String(t || '') }); // the words you are saying, shown as you say them (the phone's own listening)
         },
         text: (t) => { if (!((this.state || {}).talk)) return; t = (t || '').trim(); if (!t) { this._empty = (this._empty || 0) + 1; if (this._empty < 3) { talkListen(); return; } this._empty = 0; this.setState({ talk: '', voiceNote: "Didn't hear anything. Tap the orb to start again." }); return; } this._empty = 0; talkAsk(t); },
         error: (code) => {
           if (!((this.state || {}).talk)) return;
           if (code === 'blocked') this.setState({ talk: '', voiceNote: 'The microphone is blocked. Allow it in the browser.' });
           else if (code === 'no-mic') this.setState({ talk: '', voiceNote: 'No microphone found.' });
+          else if (code === 'phone-stt') this.setState({ talk: '', voiceNote: "The phone's listening didn't work. Tap the orb to try again." });
           else talkListenBrowser();
         },
       });
     };
     const atts = (s.atts || []).map((a, i) => ({ name: a.name, remove: () => this.setState({ atts: (((this.state || {}).atts) || []).filter((_, j) => j !== i) }) }));
     const talk = s.talk || '';
-    const TALK = { listening: ['Listening', "Speak when you're ready.", '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Searching the vault and the web.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'Tap Interrupt to stop her.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
+    const TALK = { listening: ['Listening', "Speak when you're ready.", '3px solid #F5F5F5', 'rgba(245,245,245,0.14)', '34px', 'Done speaking'], thinking: ['Working', 'Working on it.', '1.5px solid #6A6A6A', 'rgba(245,245,245,0.05)', '14px', 'Working'], speaking: ['Speaking', 'Tap Interrupt to stop her.', '3px solid #B5B5B5', 'rgba(245,245,245,0.1)', '24px', 'Interrupt'] };
     const tv = TALK[talk] || TALK.listening;
     const hasDraft = !!((s.draft || '').trim()) || atts.length > 0;
     const startVoice = () => {
@@ -748,7 +703,8 @@ class Component extends DCLogic {
         toggle: () => {
           const cur = (this.state && this.state.taskDone) || {};
           this.setState({ taskDone: { ...cur, [t.id]: !cur[t.id] } });
-        }
+        },
+        edit: () => { try { window.vault.editTask(t); } catch (e) {} }
       };
     });
     tasks.sort((a, b) => (a.dueKey || '9999').localeCompare(b.dueKey || '9999') || (a.time || '99:99').localeCompare(b.time || '99:99'));
@@ -761,21 +717,52 @@ class Component extends DCLogic {
     const nextOverdue = !!nextTask && !!nextTask.dueKey && nextTask.dueKey < todayKey;
     const nextText = nextTask ? nextTask.title + (nextTask.dueKey ? ' · ' + nextTask.dueKey.slice(5, 7) + '/' + nextTask.dueKey.slice(8, 10) : '') : 'Nothing queued';
     const events = s.events || [];
-    const nextEv = events.filter((e) => new Date(e.start) > now).sort((a, b) => new Date(a.start) - new Date(b.start))[0];
-    const sched = nextEv
-      ? { isSched: true, label: nextEv.title, value: (() => { const d = new Date(nextEv.start); const h = d.getHours(); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + pad(d.getMinutes()); })() }
-      : { isSched: true, label: 'Schedule', value: '—' };
+    const evKey = (e) => e.date + 'T' + (e.allDay || !e.start ? '23:59' : ('0' + e.start).slice(-5));
+    const evAt = (e) => new Date(evKey(e) + ':00');
+    // Scheduled tile: how many things are coming up in the next 7 days: calendar events (a timed one that has not started, or an all-day one today or later) plus open tasks that have a due date (a timed one still ahead, or one with a date and no time, today or later). Past items, overdue tasks, done tasks and anything further than 7 days away are not counted.
+    const schedEnd = new Date(now); schedEnd.setDate(schedEnd.getDate() + 7);
+    const schedEndKey = schedEnd.getFullYear() + '-' + pad(schedEnd.getMonth() + 1) + '-' + pad(schedEnd.getDate());
+    const schedEvents = events.filter((e) => e.date && e.date <= schedEndKey && evAt(e) > now).length;
+    const schedTasks = openTasks.filter((t) => t.dueKey && t.dueKey <= schedEndKey && (t.time ? new Date(t.dueKey + 'T' + ('0' + t.time).slice(-5) + ':00') > now : t.dueKey >= todayKey)).length;
+    const sched = { isSched: true, label: 'Scheduled', href: 'CalendarPhone.dc.html', value: String(schedEvents + schedTasks) };
     const overview = [
       { label: 'Today', value: String(openTasks.filter((t) => t.dueKey === todayKey).length) },
       sched,
       { label: 'Projects', value: s.vproj ? String(s.vproj.filter((p) => p.status === 'active').length) : (s.projCount == null ? '—' : String(s.projCount)) },
       { label: 'All Tasks', value: String(openTasks.length) }
-    ].map((o) => ({ ...o, href: ({ 'All Tasks': 'TasksPhone.dc.html', 'Projects': 'ProjectsPhone.dc.html' })[o.label] || (o.isSched ? 'CalendarPhone.dc.html' : '') })).map((o) => ({ ...o, isLink: !!o.href, isBtn: !o.href, hint: o.label, on: s.ovSel === o.label, bg: s.ovSel === o.label ? '#2C2C2C' : '#222222', border: s.ovSel === o.label ? '#6A6A6A' : '#2E2E2E', pick: () => this.setState({ ovSel: (this.state || {}).ovSel === o.label ? '' : o.label }) }));
+    ].map((o) => ({ ...o, fs: o.isSched && o.value.length > 5 ? '16px' : '28px', href: o.isSched ? o.href : ({ 'All Tasks': 'TasksPhone.dc.html', 'Projects': 'ProjectsPhone.dc.html' })[o.label] || '' })).map((o) => ({ ...o, isLink: !!o.href, isBtn: !o.href, hint: o.label, on: s.ovSel === o.label, bg: s.ovSel === o.label ? '#2C2C2C' : '#222222', border: s.ovSel === o.label ? '#6A6A6A' : '#2E2E2E', pick: () => this.setState({ ovSel: (this.state || {}).ovSel === o.label ? '' : o.label }) }));
 
+
+    // ---- redesigned Home: dots under the week, header, Today list, stack ----
+    week.forEach((d) => { const n = taskDefs.filter((t) => !taskDone[t.id] && t.dueKey === d.key).length + events.filter((e) => e.date === d.key).length; d.dots = Array.from({ length: Math.min(2, n) }, () => ({ c: d.sel ? '#121212' : '#9A9A9A' })); });
+    const hmTime = (d) => { const h = d.getHours(); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + pad(d.getMinutes()); };
+    const evToday = events.filter((e) => !e.allDay && e.start && e.date === todayKey).map((e) => ({ e, d: evAt(e) })).filter((x) => x.d > now).sort((a, b) => a.d - b.d);
+    const evNext = evToday[0], evThen = evToday[1];
+    const evMin = evNext ? Math.max(0, Math.round((evNext.d - now) / 60000)) : 0;
+    const todayEv = { has: !!evNext, time: evNext ? hmTime(evNext.d) : '', title: evNext ? evNext.e.title : '', then: evThen ? 'then ' + evThen.e.title + ' at ' + hmTime(evThen.d) : '', in: evNext ? (evMin >= 60 ? 'in ' + Math.round(evMin / 60) + ' h' : 'in ' + evMin + ' min') : '' };
+    const GORD = { Overdue: 0, Today: 1, Upcoming: 2, 'No date': 3 };
+    const todayRows = tasks.slice().sort((a, b) => (GORD[a.grp] - GORD[b.grp]) || (a.dueText < b.dueText ? -1 : a.dueText > b.dueText ? 1 : 0)).map((t) => ({ ...t, right: t.grp === 'Overdue' ? 'Overdue' : (t.grp === 'Today' ? (t.hasTime ? t.time : 'Today') : t.dueText), rcol: t.grp === 'Overdue' ? '#E07070' : '#8A8A8A' }));
+
+    // ---- Home: habit heat grid (18 weeks, one square per day, shade = habits done) ----
+    const hgd = s.hgd || {};
+    const HSHADE = ['#2A2A2A', '#444444', '#666666', '#8A8A8A', '#B0B0B0', '#E0E0E0'];
+    const hgMon = new Date(); hgMon.setHours(0, 0, 0, 0); hgMon.setDate(hgMon.getDate() - ((hgMon.getDay() + 6) % 7) - 17 * 7);
+    const hgToday = new Date(); const hgTodayKey = hgToday.getFullYear() + '-' + String(hgToday.getMonth() + 1).padStart(2, '0') + '-' + String(hgToday.getDate()).padStart(2, '0');
+    const hgrid = Array.from({ length: 7 }, (_, r) => ({ cells: Array.from({ length: 18 }, (_, w) => { const d = new Date(hgMon); d.setDate(d.getDate() + w * 7 + r); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); if (k > hgTodayKey) return { bg: 'transparent', bd: '0' }; const n = k === hgTodayKey ? habits.filter((h) => h.done).length : (hgd[k] || 0); return { bg: n ? HSHADE[Math.min(5, n)] : (k === hgTodayKey ? 'transparent' : HSHADE[0]), bd: k === hgTodayKey && !n ? '1.5px solid #EDEDED' : '0' }; }) }));
+    const hdr = { dow: now.toLocaleDateString('en-US', { weekday: 'short' }), date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), setOpen: !!s.setOpen, openSet: () => this.setState({ setOpen: true }), closeSet: () => this.setState({ setOpen: false }), themeName: (window.lifeosTheme && window.lifeosTheme.get()) === 'light' ? 'Light' : 'Dark' };
+    overview.forEach((o, i) => { o.bl = i ? '1px solid #262626' : '0'; o.pl = i ? '12px' : '0'; });
+    const hh = { steps: s.hh && s.hh.steps != null ? Number(s.hh.steps).toLocaleString('en-US') : '—', lifts: s.hh && s.hh.lifts != null ? String(s.hh.lifts) : '—', cardio: s.hh && s.hh.cardio != null ? String(s.hh.cardio) : '—' };
+    const stkPgB = s.pgB || 0;
+    const stkPg = s.pgA || 0;
+    const stk = { aonStack: (e) => { if (this._dg) return; const el = e.target; const raw = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); const r = ((raw - 1) % 3 + 3) % 3; if (r !== (this.state || {}).pgA) this.setState({ pgA: r }); clearTimeout(this._scA); this._scA = setTimeout(() => this._fix && this._fix('stackA'), 140); },
+      capOn: (s.capTab || 'cap') === 'cap', refOn: s.capTab === 'ref', capC: (s.capTab || 'cap') === 'cap' ? '#F5F5F5' : '#6B6B6B', refC: s.capTab === 'ref' ? '#F5F5F5' : '#6B6B6B', pickCap: () => this.setState({ capTab: 'cap' }), pickRef: () => this.setState({ capTab: 'ref' }) };
+    stk.bonStack = (e) => { if (this._dg) return; const el = e.target; const raw = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); const r = ((raw - 1) % 3 + 3) % 3; if (r !== (this.state || {}).pgB) this.setState({ pgB: r }); clearTimeout(this._scB); this._scB = setTimeout(() => this._fix && this._fix('stackB'), 140); };
+    for (let i = 0; i < 3; i++) { stk['bgo' + i] = () => this._to && this._to('stackB', i + 1); stk['bdw' + i] = stkPgB === i ? 18 : 6; stk['bdc' + i] = stkPgB === i ? '#EDEDED' : '#4A4A4A'; }
+    for (let i = 0; i < 3; i++) { stk['ago' + i] = () => this._to && this._to('stackA', i + 1); stk['adw' + i] = stkPg === i ? 18 : 6; stk['adc' + i] = stkPg === i ? '#EDEDED' : '#4A4A4A'; }
     // long-press menu on the bottom island
     const NAVS = {
       home: ['HOME', [['Tasks', 'TasksPhone.dc.html'], ['Calendar', 'CalendarPhone.dc.html'], ['Projects', 'ProjectsPhone.dc.html']]],
-      areas: ['AREAS', [['Health', 'HealthPhone.dc.html'], ['MMA', 'MmaPhone.dc.html'], ['Spiritual', 'SpiritualPhone.dc.html'], ['Work', 'WorkPhone.dc.html'], ['Finances', 'FinancesPhone.dc.html']]],
+      areas: ['AREAS', [['Health', 'HealthPhone.dc.html'], ['MMA', 'MmaPhone.dc.html'], ['Spiritual', 'SpiritualPhone.dc.html'], ['Finances', 'FinancesPhone.dc.html']]],
       knowledge: ['KNOWLEDGE', [['Journal', 'KnowledgePhone.dc.html?sec=Journal'], ['College', 'KnowledgePhone.dc.html?sec=College'], ['Languages', 'KnowledgePhone.dc.html?sec=Languages'], ['Self-Study', 'KnowledgePhone.dc.html?sec=Self-Study'], ['Resources', 'KnowledgePhone.dc.html?sec=Resources'], ['People', 'KnowledgePhone.dc.html?sec=People'], ['Places', 'KnowledgePhone.dc.html?sec=Places']]]
     };
     const navKey = (this.state || {}).navMenu || '';
@@ -786,6 +773,8 @@ class Component extends DCLogic {
     }) : [];
     const navDown = (k) => () => { this._navLong = false; clearTimeout(this._nt); this._nt = setTimeout(() => { this._navLong = true; this.setState({ navMenu: k }); }, 450); };
     return {
+      searchPress: () => { try { window.lifeosSearch && window.lifeosSearch(); } catch (e) {} },
+      hgrid, hdr, stk, hh, todayEv, todayRows, gearPress: () => { try { window.lifeosGear && window.lifeosGear(); } catch (e) {} },
       navOpen: !!navKey, navTitle: navKey ? NAVS[navKey][0] : '', navItems,
       closeNav: () => this.setState({ navMenu: '' }),
       prevWeek: () => shiftSel(-7), nextWeek: () => shiftSel(7),
@@ -808,6 +797,8 @@ class Component extends DCLogic {
       tasks, overview,
       newTime: s.newTime || '',
       onTime: (e) => this.setState({ newTime: e.target.value }),
+      timeBtn: (() => { const v = normTime(s.newTime); if (!v) return 'Time'; const h = +v.slice(0, 2); return (h % 12 || 12) + ':' + v.slice(3) + ' ' + (h >= 12 ? 'PM' : 'AM'); })(),
+      timeBtnColor: normTime(s.newTime) ? '#F5F5F5' : '#8A8A8A',
       habOpen: !!s.habOpen, habClosed: !s.habOpen,
       toggleHab: () => this.setState({ habOpen: !(this.state || {}).habOpen }),
       nextText, nextColor: nextOverdue ? '#F5F5F5' : '#C8C8C8', dayHeads,
@@ -816,7 +807,7 @@ class Component extends DCLogic {
       pickerOpen: !!s.pickerOpen, pickCells, dueBtn,
       dueBtnColor: s.newDue ? '#F5F5F5' : '#8A8A8A',
       pickLabel: pv.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      togglePicker: () => this.setState({ pickerOpen: !(this.state || {}).pickerOpen, pickOffset: 0 }),
+      togglePicker: () => this.setState({ pickerOpen: !(this.state || {}).pickerOpen, pickOffset: 0, timeOpen: false }),
       prevPick: () => this.setState({ pickOffset: ((this.state || {}).pickOffset || 0) - 1 }),
       nextPick: () => this.setState({ pickOffset: ((this.state || {}).pickOffset || 0) + 1 }),
       pickToday: () => this.setState({ newDue: fk(new Date()), pickerOpen: false }),
@@ -824,10 +815,11 @@ class Component extends DCLogic {
       captureText: s.captureText || '', reflectText: s.reflectText || '',
       onCapture: (e) => this.setState({ captureText: e.target.value }),
       onReflect: (e) => this.setState({ reflectText: e.target.value }),
+      themeIsLight: (window.lifeosTheme && window.lifeosTheme.get()) === 'light', themeLabel: 'Theme: ' + ((window.lifeosTheme && window.lifeosTheme.get()) === 'light' ? 'Light' : 'Dark') + ' · change', themeAria: ((window.lifeosTheme && window.lifeosTheme.get()) === 'light' ? 'Switch to dark mode' : 'Switch to light mode'), toggleTheme: () => window.lifeosTheme && window.lifeosTheme.toggle(), themeIsDark: !((window.lifeosTheme && window.lifeosTheme.get()) === 'light'),
       atts, hasAtts: atts.length > 0, attachOpen: !!s.attachOpen, showSend: hasDraft, noSend: !hasDraft,
       toggleAttach: () => this.setState({ attachOpen: !(this.state || {}).attachOpen }),
       pickCam: addFiles, pickPhoto: addFiles, pickFile: addFiles,
-      talkOn: !!talk, talkLabel: tv[0], talkCaption: tv[1], orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
+      talkOn: !!talk, talkLabel: tv[0], talkCaption: ((s.talkText || '').trim() || tv[1]), orbBorder: tv[2], orbHalo: tv[3], orbDot: tv[4], talkAria: tv[5],
       toggleTalk: () => { stopVoice(); talkStop(); if ((this.state || {}).talk) this.setState({ talk: '' }); else { this.setState({ chatOpen: true, attachOpen: false }); try { RV() && RV().preload(); } catch (err) {} talkListen(); } },
       cycleTalk: () => { const c = (this.state || {}).talk; if (c === 'listening') { try { if (this._rec) this._rec.stop(); else if (RV()) RV().finishListen(); } catch (err) {} } else if (c === 'speaking') { talkStop(); talkListen(); } },
       voiceName: String(RV() && !RV().tts.failed ? RV().voiceId().replace(/^[a-z]{2}_/, '').replace(/^./, (c) => c.toUpperCase()) : (s.voiceName || (chosenVoice() || {}).name || 'default')).replace(/^Microsoft\s+/, '').replace(/\s+-\s+English.*$/, '').slice(0, 32),
@@ -863,7 +855,7 @@ class Component extends DCLogic {
       adding, priOpts, submitTask,
       newTitle: s.newTitle || '', newDue: s.newDue || '',
       toggleAdd: () => this.setState({ adding: !(this.state || {}).adding }),
-      cancelAdd: () => this.setState({ adding: false, pickerOpen: false, newTitle: '', newDue: '', newTime: '' }),
+      cancelAdd: () => this.setState({ adding: false, pickerOpen: false, timeOpen: false, newTitle: '', newDue: '', newTime: '' }),
       onTitle: (e) => this.setState({ newTitle: e.target.value }),
       onDue: (e) => this.setState({ newDue: e.target.value }),
       onKey: (e) => { if (e.key === 'Enter') submitTask(); },
