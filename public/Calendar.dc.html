@@ -197,9 +197,9 @@
         <p style="margin-top: 18px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: #8A8A8A;">EVENTS</p>
         <sc-if value="{{noEv}}" hint-placeholder-val="{{ false }}"><p style="padding: 10px 0 2px; font-size: 13.5px; color: #8A8A8A;">Nothing scheduled.</p></sc-if>
         <sc-for list="{{selEvents}}" as="e" hint-placeholder-count="1">
-          <div title="{{e.field}}" style="display: flex; align-items: baseline; gap: 14px; min-height: 44px; padding: 10px 0; border-bottom: 1px solid #262626;">
+          <div title="{{e.field}}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 44px; padding: 10px 0; border-bottom: 1px solid #262626;">
             <span style="flex: 0 0 92px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #9A9A9A;">{{e.time}}</span>
-            <span style="flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: #F0F0F0;">{{e.title}}</span>
+            <span style="flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: #F0F0F0;">{{e.title}}</span><sc-if value="{{e.notAsk}}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{e.askRemove}}" aria-label="Remove event" style="flex: 0 0 44px; width: 44px; height: 44px; margin: -10px -12px -10px 0; padding: 0; background: none; border: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #8A8A8A;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></sc-if><sc-if value="{{e.isAsk}}" hint-placeholder-val="{{ false }}"><div role="group" aria-label="Remove this event?" style="flex-basis: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 4px;"><span style="margin-right: auto; font-size: 13.5px; color: #C8C8C8;">Remove this event?</span><button type="button" onClick="{{e.cancelRemove}}" style="min-height: 44px; padding: 0 14px; background: none; border: 0; cursor: pointer; font-size: 13.5px; color: #B5B5B5;">Cancel</button><button type="button" onClick="{{e.confirmRemove}}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; cursor: pointer; font-size: 13.5px; font-weight: 600; background: #EDEDED; color: #121212;">Remove</button></div></sc-if>
           </div>
         </sc-for>
         <p style="margin-top: 22px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: #8A8A8A;">TASKS DUE</p>
@@ -569,7 +569,12 @@ class Component extends DCLogic {
     }
     const selB = by[sel] || { ev: [], tk: [] };
     const selEvents = selB.ev.slice().sort(byTime).map((e) => ({
-      time: evTime(e), title: e.title,
+      id: e.id, time: evTime(e), title: e.title,
+      notAsk: s.delEv !== e.id, isAsk: s.delEv === e.id,
+      askRemove: () => this.setState({ delEv: e.id }),
+      cancelRemove: () => this.setState({ delEv: '' }),
+      // Removing drops the event from the page state; vsync.js then calls DELETE /api/events/:id, which saves the line to 1 Human/99 Bin/Removed events.md before taking it out of the day's ## Appointments.
+      confirmRemove: () => this.setState({ events: ((this.state || {}).events || []).filter((x) => x.id !== e.id), delEv: '' }),
       field: 'date:: ' + e.date + (e.allDay ? ' · allDay' : (e.start ? ' · startTime:: ' + e.start : ''))
     }));
     const selTasks = tasks.filter((t) => t.dueKey === sel);
