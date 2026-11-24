@@ -719,18 +719,14 @@ class Component extends DCLogic {
     const events = s.events || [];
     const evKey = (e) => e.date + 'T' + (e.allDay || !e.start ? '23:59' : ('0' + e.start).slice(-5));
     const evAt = (e) => new Date(evKey(e) + ':00');
-    // Schedule tile: the next thing coming up, from calendar events AND open tasks with a due date (past items and done tasks are ignored).
-    // Timed items come before all-day items on the same day. Events open Calendar, tasks open Tasks.
+    // Scheduled tile: a count of today's calendar events and open tasks (past items and done tasks are ignored).
     const schedHM = (v) => { const h = +v.slice(0, 2); return (use12 ? String(h % 12 || 12) : pad(h)) + ':' + v.slice(3, 5); };
     const schedDay = (key) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(key + 'T12:00:00').getDay()];
     const schedItems = [];
     events.forEach((e) => { const tm = !e.allDay && e.start ? ('0' + e.start).slice(-5) : ''; if (!e.date) return; if (tm ? new Date(e.date + 'T' + tm + ':00') > now : e.date >= todayKey) schedItems.push({ kind: 'event', title: e.title, date: e.date, time: tm }); });
     openTasks.forEach((t) => { if (!t.dueKey) return; const tm = t.time ? ('0' + t.time).slice(-5) : ''; if (tm ? new Date(t.dueKey + 'T' + tm + ':00') > now : t.dueKey >= todayKey) schedItems.push({ kind: 'task', title: t.title, date: t.dueKey, time: tm }); });
     schedItems.sort((a, b) => a.date.localeCompare(b.date) || ((a.time ? 0 : 1) - (b.time ? 0 : 1)) || a.time.localeCompare(b.time));
-    const nextSch = schedItems[0];
-    const sched = nextSch
-      ? { isSched: true, label: nextSch.title, href: nextSch.kind === 'event' ? 'CalendarPhone.dc.html' : 'TasksPhone.dc.html', value: (nextSch.date === todayKey ? '' : schedDay(nextSch.date) + (nextSch.time ? ' ' : '')) + (nextSch.time ? schedHM(nextSch.time) : (nextSch.date === todayKey ? 'Today' : '')) }
-      : { isSched: true, label: 'Schedule', value: '—' };
+    const sched = { isSched: true, label: 'Scheduled', href: 'CalendarPhone.dc.html', value: String(schedItems.filter((x) => x.date === todayKey).length) };
     const overview = [
       { label: 'Today', value: String(openTasks.filter((t) => t.dueKey === todayKey).length) },
       sched,
