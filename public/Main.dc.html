@@ -804,9 +804,11 @@ class Component extends DCLogic {
     const events = s.events || [];
     const evKey = (e) => e.date + 'T' + (e.allDay || !e.start ? '23:59' : ('0' + e.start).slice(-5));
     const evAt = (e) => new Date(evKey(e) + ':00');
-    // Scheduled tile: how many things are still coming up, with no end date: calendar events (a timed one that has not started, or an all-day one today or later) plus open tasks that have a due date (a timed one still ahead, or one with a date and no time, today or later). Past items, overdue tasks and done tasks are not counted.
-    const schedEvents = events.filter((e) => e.date && evAt(e) > now).length;
-    const schedTasks = openTasks.filter((t) => t.dueKey && (t.time ? new Date(t.dueKey + 'T' + ('0' + t.time).slice(-5) + ':00') > now : t.dueKey >= todayKey)).length;
+    // Scheduled tile: how many things are coming up in the next 7 days: calendar events (a timed one that has not started, or an all-day one today or later) plus open tasks that have a due date (a timed one still ahead, or one with a date and no time, today or later). Past items, overdue tasks, done tasks and anything further than 7 days away are not counted.
+    const schedEnd = new Date(now); schedEnd.setDate(schedEnd.getDate() + 7);
+    const schedEndKey = schedEnd.getFullYear() + '-' + pad(schedEnd.getMonth() + 1) + '-' + pad(schedEnd.getDate());
+    const schedEvents = events.filter((e) => e.date && e.date <= schedEndKey && evAt(e) > now).length;
+    const schedTasks = openTasks.filter((t) => t.dueKey && t.dueKey <= schedEndKey && (t.time ? new Date(t.dueKey + 'T' + ('0' + t.time).slice(-5) + ':00') > now : t.dueKey >= todayKey)).length;
     const sched = { isSched: true, label: 'Scheduled', href: 'Calendar.dc.html', value: String(schedEvents + schedTasks) };
     const overview = [
       { label: 'Today', value: String(openTasks.filter((t) => t.dueKey === todayKey).length) },
